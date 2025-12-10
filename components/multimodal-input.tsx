@@ -190,7 +190,7 @@ function PureMultimodalInput({
       const { error } = await response.json();
       toast.error(error);
     } catch (_error) {
-      toast.error("Failed to upload file, please try again!");
+      toast.error("文件上传失败，请重试！");
     }
   }, []);
 
@@ -267,7 +267,7 @@ function PureMultimodalInput({
         ]);
       } catch (error) {
         console.error("Error uploading pasted images:", error);
-        toast.error("Failed to upload pasted image(s)");
+        toast.error("粘贴的图片上传失败");
       } finally {
         setUploadQueue([]);
       }
@@ -312,7 +312,7 @@ function PureMultimodalInput({
         onSubmit={(event) => {
           event.preventDefault();
           if (status !== "ready") {
-            toast.error("Please wait for the model to finish its response!");
+            toast.error("请等待模型完成响应！");
           } else {
             submitForm();
           }
@@ -360,7 +360,7 @@ function PureMultimodalInput({
             maxHeight={200}
             minHeight={44}
             onChange={handleInput}
-            placeholder="Send a message..."
+            placeholder="输入消息..."
             ref={textareaRef}
             rows={1}
             value={input}

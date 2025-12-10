@@ -427,7 +427,7 @@ function PureArtifact({
 
                   {isContentDirty ? (
                     <div className="text-muted-foreground text-sm">
-                      Saving changes...
+                      正在保存...
                     </div>
                   ) : document ? (
                     <div className="text-muted-foreground text-sm">

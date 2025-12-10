@@ -1,0 +1,126 @@
+# 快速参考指南
+
+## 常用命令
+
+```bash
+# 开发
+pnpm install          # 安装依赖
+pnpm dev              # 启动开发服务器 (localhost:3000)
+pnpm build            # 构建生产版本
+
+# 数据库
+pnpm db:migrate       # 应用数据库迁移
+pnpm db:generate      # 从 schema 生成迁移文件
+pnpm db:studio        # 打开 Drizzle Studio GUI
+pnpm db:push          # 直接推送 schema (仅开发)
+
+# 代码质量
+pnpm lint             # 检查代码规范
+pnpm format           # 自动修复格式问题
+
+# 测试
+pnpm test                                    # 运行所有测试
+pnpm exec playwright test tests/e2e/         # 运行 e2e 测试
+pnpm exec playwright test tests/routes/      # 运行路由测试
+pnpm exec playwright test --project=e2e      # 按项目运行
+```
+
+---
+
+## 环境变量配置
+
+创建 `.env.local` 文件：
+
+```env
+# 必需
+AUTH_SECRET=your-secret-key          # NextAuth 密钥
+NEWAPI_BASE_URL=https://xxx/v1       # NewAPI 地址 (需以 /v1 结尾)
+NEWAPI_API_KEY=sk-xxx                # NewAPI 密钥
+POSTGRES_URL=postgres://xxx          # PostgreSQL 连接串
+BLOB_READ_WRITE_TOKEN=xxx            # Vercel Blob Token
+
+# 可选
+REDIS_URL=redis://localhost:6379/0   # Redis (启用流恢复)
+```
+
+---
+
+## 模型配置
+
+编辑 `lib/ai/providers.ts` 修改模型：
+
+```typescript
+// 修改这里的模型名称
+"chat-model": newapi("openai/gpt-4o-mini"),
+"chat-model-reasoning": wrapLanguageModel({
+  model: newapi("openai/gpt-4o-mini"),
+  middleware: extractReasoningMiddleware({ tagName: "think" }),
+}),
+```
+
+编辑 `lib/ai/models.ts` 修改 UI 显示：
+
+```typescript
+export const chatModels: ChatModel[] = [
+  {
+    id: "chat-model",
+    name: "GPT-4o Mini",
+    description: "快速响应的通用模型",
+  },
+  // ...
+];
+```
+
+---
+
+## 数据库 Schema 修改流程
+
+1. 修改 `lib/db/schema.ts`
+2. 生成迁移: `pnpm db:generate`
+3. 应用迁移: `pnpm db:migrate`
+
+---
+
+## 添加新的 AI 工具
+
+1. 在 `lib/ai/tools/` 创建新文件
+2. 在 `app/(chat)/api/chat/route.ts` 注册工具：
+
+```typescript
+tools: {
+  getWeather,
+  createDocument: createDocument({ session, dataStream }),
+  // 添加新工具
+  myNewTool: myNewTool({ session, dataStream }),
+},
+```
+
+---
+
+## 添加新的 Artifact 类型
+
+1. 在 `artifacts/` 创建新目录
+2. 实现 `client.tsx` (客户端渲染) 和可选的 `server.ts`
+3. 在 `components/artifact.tsx` 注册：
+
+```typescript
+export const artifactDefinitions = [
+  textArtifact,
+  codeArtifact,
+  imageArtifact,
+  sheetArtifact,
+  // 添加新类型
+  myNewArtifact,
+];
+```
+
+---
+
+## 代码规范要点
+
+- 使用 `import type` 导入类型
+- 不使用 TypeScript enum，改用 `as const`
+- 不使用 `any` 类型
+- 使用 `for...of` 替代 `Array.forEach`
+- React 组件不使用数组索引作为 key
+- 使用 `<>` 替代 `<Fragment>`

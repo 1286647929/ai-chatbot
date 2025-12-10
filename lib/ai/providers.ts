@@ -1,10 +1,16 @@
-import { gateway } from "@ai-sdk/gateway";
+import { createOpenAI } from "@ai-sdk/openai";
 import {
   customProvider,
   extractReasoningMiddleware,
   wrapLanguageModel,
 } from "ai";
 import { isTestEnvironment } from "../constants";
+
+// 创建 NewAPI 客户端
+const newapi = createOpenAI({
+  baseURL: process.env.NEWAPI_BASE_URL,
+  apiKey: process.env.NEWAPI_API_KEY,
+});
 
 export const myProvider = isTestEnvironment
   ? (() => {
@@ -25,12 +31,13 @@ export const myProvider = isTestEnvironment
     })()
   : customProvider({
       languageModels: {
-        "chat-model": gateway.languageModel("xai/grok-2-vision-1212"),
+        // 根据你 NewAPI 中配置的模型名称修改
+        "chat-model": newapi("openai/gpt-4o-mini"),
         "chat-model-reasoning": wrapLanguageModel({
-          model: gateway.languageModel("xai/grok-3-mini"),
+          model: newapi("openai/gpt-4o-mini"),
           middleware: extractReasoningMiddleware({ tagName: "think" }),
         }),
-        "title-model": gateway.languageModel("xai/grok-2-1212"),
-        "artifact-model": gateway.languageModel("xai/grok-2-1212"),
+        "title-model": newapi("openai/gpt-4o-mini"),
+        "artifact-model": newapi("openai/gpt-4o-mini"),
       },
     });
