@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/app/(auth)/auth";
 import { LegalChat } from "@/components/legal/legal-chat";
+import { LegalChatHeader } from "@/components/legal/legal-chat-header";
 
 export default async function LegalPage() {
   const session = await auth();
@@ -12,13 +13,11 @@ export default async function LegalPage() {
   }
 
   return (
-    <div className="flex h-dvh flex-col bg-background">
-      <header className="flex h-14 items-center justify-between border-b px-4">
-        <h1 className="font-semibold text-lg">法律文书助手</h1>
-      </header>
-      <main className="flex-1 overflow-hidden">
+    <>
+      <LegalChatHeader />
+      <div className="flex h-[calc(100dvh-52px)] flex-col bg-background">
         <LegalChat />
-      </main>
-    </div>
+      </div>
+    </>
   );
 }

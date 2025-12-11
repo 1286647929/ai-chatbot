@@ -1,18 +1,177 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { MicIcon, XIcon } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { CheckIcon, MicIcon, PlusIcon, XIcon } from "lucide-react";
 
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
+import { VoiceWaveform } from "./voice-waveform";
 
 interface VoiceInputProps {
   onRecordingComplete: (blob: Blob, duration: number) => void;
   disabled?: boolean;
 }
 
+interface InlineVoiceRecorderProps {
+  isRecording: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+  disabled?: boolean;
+}
+
+/**
+ * 内联语音录制UI组件
+ * 在输入框位置显示波形动画和操作按钮
+ */
+export function InlineVoiceRecorder({
+  isRecording,
+  onCancel,
+  onConfirm,
+  disabled,
+}: InlineVoiceRecorderProps) {
+  return (
+    <AnimatePresence>
+      {isRecording && (
+        <motion.div
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex h-[52px] w-full items-center gap-3 rounded-full border bg-background px-4"
+          exit={{ opacity: 0, scale: 0.95 }}
+          initial={{ opacity: 0, scale: 0.95 }}
+          transition={{ duration: 0.2 }}
+        >
+          {/* 左侧添加按钮占位（保持布局一致） */}
+          <div className="flex size-8 shrink-0 items-center justify-center text-zinc-400">
+            <PlusIcon className="size-5" />
+          </div>
+
+          {/* 中间波形动画 */}
+          <div className="flex-1">
+            <VoiceWaveform className="w-full" isRecording={isRecording} />
+          </div>
+
+          {/* 右侧操作按钮 */}
+          <div className="flex items-center gap-2">
+            {/* 取消按钮 */}
+            <Button
+              className="size-8 rounded-full"
+              disabled={disabled}
+              onClick={onCancel}
+              size="icon"
+              title="取消录音"
+              variant="ghost"
+            >
+              <XIcon className="size-5" />
+            </Button>
+
+            {/* 确认按钮 */}
+            <Button
+              className="size-8 rounded-full"
+              disabled={disabled}
+              onClick={onConfirm}
+              size="icon"
+              title="确认发送"
+              variant="ghost"
+            >
+              <CheckIcon className="size-5" />
+            </Button>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/**
+ * 语音输入Hook
+ * 提供录制状态和控制方法
+ */
+export function useVoiceInput(
+  onRecordingComplete: (blob: Blob, duration: number) => void
+) {
+  const [isRecordingMode, setIsRecordingMode] = useState(false);
+  const recordingRef = useRef<{ blob: Blob | null; duration: number }>({
+    blob: null,
+    duration: 0,
+  });
+
+  const {
+    isRecording,
+    duration,
+    error,
+    hasPermission,
+    startRecording,
+    stopRecording,
+    cancelRecording,
+    requestPermission,
+  } = useVoiceRecorder({
+    onRecordingComplete: (blob, dur) => {
+      // 保存录制结果，等待用户确认
+      recordingRef.current = { blob, duration: dur };
+    },
+    onError: (err) => {
+      console.error("Voice recording error:", err);
+      setIsRecordingMode(false);
+    },
+  });
+
+  // 开始录音
+  const handleStartRecording = useCallback(async () => {
+    if (hasPermission === null) {
+      const granted = await requestPermission();
+      if (!granted) return;
+    }
+
+    recordingRef.current = { blob: null, duration: 0 };
+    setIsRecordingMode(true);
+    await startRecording();
+  }, [hasPermission, requestPermission, startRecording]);
+
+  // 取消录音
+  const handleCancel = useCallback(() => {
+    cancelRecording();
+    recordingRef.current = { blob: null, duration: 0 };
+    setIsRecordingMode(false);
+  }, [cancelRecording]);
+
+  // 确认录音（停止并触发回调）
+  const handleConfirm = useCallback(async () => {
+    // 先停止录制
+    stopRecording();
+
+    // 等待一帧让 onRecordingComplete 回调执行
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // 触发回调
+    if (recordingRef.current.blob) {
+      onRecordingComplete(
+        recordingRef.current.blob,
+        recordingRef.current.duration
+      );
+    }
+
+    recordingRef.current = { blob: null, duration: 0 };
+    setIsRecordingMode(false);
+  }, [stopRecording, onRecordingComplete]);
+
+  return {
+    isRecordingMode,
+    isRecording,
+    duration,
+    error,
+    hasPermission,
+    startRecording: handleStartRecording,
+    cancelRecording: handleCancel,
+    confirmRecording: handleConfirm,
+  };
+}
+
+/**
+ * 语音输入按钮组件
+ * 点击后进入录音模式
+ */
 export function VoiceInput({ onRecordingComplete, disabled }: VoiceInputProps) {
   const isMobile = useIsMobile();
   const [isHolding, setIsHolding] = useState(false);

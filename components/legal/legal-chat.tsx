@@ -2,14 +2,14 @@
 
 import { type ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { PaperclipIcon } from "lucide-react";
+import { MicIcon, PaperclipIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { useLegalChat } from "@/hooks/use-legal-chat";
 import type { LegalAttachment, LegalMessage, LegalStep } from "@/lib/legal/types";
 import { cn } from "@/lib/utils";
 import { AttachmentAnalysisCard } from "./attachment-analysis";
-import { VoiceInput } from "./voice-input";
+import { InlineVoiceRecorder, useVoiceInput } from "./voice-input";
 import { Response } from "../elements/response";
 import { SparklesIcon, StopIcon } from "../icons";
 import { PreviewAttachment } from "../preview-attachment";
@@ -404,6 +404,25 @@ export function LegalChat() {
     initSession();
   }, [initSession]);
 
+  // 监听新建会话事件
+  useEffect(() => {
+    const handleNewSession = () => {
+      // 重置状态并初始化新会话
+      reset();
+      hasInitializedRef.current = false;
+      // 下一个 tick 初始化新会话
+      setTimeout(() => {
+        hasInitializedRef.current = true;
+        initSession();
+      }, 0);
+    };
+
+    window.addEventListener("legal-new-session", handleNewSession);
+    return () => {
+      window.removeEventListener("legal-new-session", handleNewSession);
+    };
+  }, [reset, initSession]);
+
   // 滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -602,38 +621,61 @@ export function LegalChat() {
     });
   }, []);
 
-  // 语音录制完成后处理
+  // 语音录制完成后处理（只填充文本，不添加附件）
   const handleVoiceRecordingComplete = useCallback(
     async (blob: Blob, _duration: number) => {
       const fileName = `voice_${Date.now()}.webm`;
       const file = new File([blob], fileName, { type: blob.type });
 
       try {
-        // 直接调用 textract API（后端会同时进行语音识别和 OSS 存储）
-        const uploadedAttachments = await uploadFilesToTextract([file], "voice");
+        // 调用 textract API 进行语音识别
+        const formData = new FormData();
+        formData.append("files", file);
+        formData.append("scene", "voice");
 
-        if (uploadedAttachments.length > 0) {
-          const attachment = uploadedAttachments[0];
-          setAttachments((prev) => [...prev, attachment]);
+        const response = await fetch("/api/textract", {
+          method: "POST",
+          body: formData,
+        });
 
-          // 如果有识别出的文本，自动填入输入框
-          if (attachment.text_content) {
+        if (!response.ok) {
+          toast.error("语音识别失败");
+          return;
+        }
+
+        const data = await response.json();
+
+        // 提取识别的文本
+        if (data.results && Array.isArray(data.results) && data.results.length > 0) {
+          const result = data.results[0];
+          if (result.status === "success" && result.text) {
+            // 只填充文本到输入框，不添加附件
             setInputValue((prev) =>
-              prev ? `${prev} ${attachment.text_content}` : attachment.text_content || ""
+              prev ? `${prev} ${result.text}` : result.text
             );
-          } else if (attachment.extraction_error) {
-            toast.error("语音识别失败");
+          } else if (result.status === "failed") {
+            toast.error(result.error || "语音识别失败");
           }
         } else {
-          toast.error("语音处理失败");
+          toast.error("语音识别失败");
         }
       } catch (error) {
-        console.error("Voice upload error:", error);
-        toast.error("语音处理失败");
+        console.error("Voice recognition error:", error);
+        toast.error("语音识别失败");
       }
     },
-    [uploadFilesToTextract]
+    []
   );
+
+  // 使用语音输入 hook
+  const {
+    isRecordingMode,
+    isRecording: isVoiceRecording,
+    startRecording: startVoiceRecording,
+    cancelRecording: cancelVoiceRecording,
+    confirmRecording: confirmVoiceRecording,
+    hasPermission: voicePermission,
+  } = useVoiceInput(handleVoiceRecordingComplete);
 
 
   // 处理键盘事件
@@ -764,80 +806,96 @@ export function LegalChat() {
               </div>
             )}
 
-            <div className="relative flex items-end gap-2">
-              <Textarea
-                className="min-h-[80px] resize-none pr-12"
+            {/* 输入区域：录音模式 vs 普通模式 */}
+            {isRecordingMode ? (
+              <InlineVoiceRecorder
                 disabled={isLoading || isStreaming}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={
-                  currentStep === "ask_question"
-                    ? "请回答上述问题..."
-                    : "请描述您的法律问题..."
-                }
-                ref={textareaRef}
-                rows={3}
-                value={inputValue}
+                isRecording={isVoiceRecording}
+                onCancel={cancelVoiceRecording}
+                onConfirm={confirmVoiceRecording}
               />
-
-              <div className="absolute right-2 bottom-2 flex items-center gap-1">
-                {/* 附件上传按钮 */}
-                <Button
-                  className="size-8"
+            ) : (
+              <div className="relative flex items-end gap-2">
+                <Textarea
+                  className="min-h-[80px] resize-none pr-12"
                   disabled={isLoading || isStreaming}
-                  onClick={() => fileInputRef.current?.click()}
-                  size="icon"
-                  title="上传附件"
-                  variant="ghost"
-                >
-                  <PaperclipIcon className="size-4" />
-                </Button>
-
-                {/* 语音输入按钮 */}
-                <VoiceInput
-                  disabled={isLoading || isStreaming}
-                  onRecordingComplete={handleVoiceRecordingComplete}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={
+                    currentStep === "ask_question"
+                      ? "请回答上述问题..."
+                      : "请描述您的法律问题..."
+                  }
+                  ref={textareaRef}
+                  rows={3}
+                  value={inputValue}
                 />
 
-                {isStreaming ? (
+                <div className="absolute right-2 bottom-2 flex items-center gap-1">
+                  {/* 附件上传按钮 */}
                   <Button
                     className="size-8"
-                    onClick={stopStream}
+                    disabled={isLoading || isStreaming}
+                    onClick={() => fileInputRef.current?.click()}
                     size="icon"
+                    title="上传附件"
                     variant="ghost"
                   >
-                    <StopIcon size={16} />
+                    <PaperclipIcon className="size-4" />
                   </Button>
-                ) : (
+
+                  {/* 语音输入按钮 */}
                   <Button
                     className="size-8"
-                    disabled={!inputValue.trim() || isLoading}
-                    onClick={handleSend}
+                    disabled={isLoading || isStreaming || voicePermission === false}
+                    onClick={startVoiceRecording}
                     size="icon"
+                    title={voicePermission === false ? "麦克风权限被拒绝" : "语音输入"}
+                    variant="ghost"
                   >
-                    <svg
-                      className="size-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        d="M22 2L11 13"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                      />
-                      <path
-                        d="M22 2L15 22L11 13L2 9L22 2Z"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                      />
-                    </svg>
+                    <MicIcon className={cn("size-4", voicePermission === false && "opacity-50")} />
                   </Button>
-                )}
+
+                  {isStreaming ? (
+                    <Button
+                      className="size-8"
+                      onClick={stopStream}
+                      size="icon"
+                      variant="ghost"
+                    >
+                      <StopIcon size={16} />
+                    </Button>
+                  ) : (
+                    <Button
+                      className="size-8"
+                      disabled={!inputValue.trim() || isLoading}
+                      onClick={handleSend}
+                      size="icon"
+                    >
+                      <svg
+                        className="size-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          d="M22 2L11 13"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                        />
+                        <path
+                          d="M22 2L15 22L11 13L2 9L22 2Z"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                        />
+                      </svg>
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* 重置按钮和流式开关 */}
             <div className="mt-2 flex items-center justify-between">
