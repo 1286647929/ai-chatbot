@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useSWRConfig } from "swr";
 import { useWindowSize } from "usehooks-ts";
 import { useArtifact } from "@/hooks/use-artifact";
+import { del } from "@/lib/api";
 import type { Document } from "@/lib/db/schema";
 import { getDocumentTimestampByIndex } from "@/lib/utils";
 import { LoaderIcon } from "./icons";
@@ -55,35 +56,27 @@ export const VersionFooter = ({
           onClick={async () => {
             setIsMutating(true);
 
+            const timestamp = getDocumentTimestampByIndex(documents, currentVersionIndex);
+
+            // 先发送删除请求
+            await del(`/api/document`, {
+              id: artifact.documentId,
+              timestamp: timestamp.toISOString(),
+            }, { showErrorToast: false });
+
+            // 然后更新本地缓存
             mutate(
               `/api/document?id=${artifact.documentId}`,
-              await fetch(
-                `/api/document?id=${artifact.documentId}&timestamp=${getDocumentTimestampByIndex(
-                  documents,
-                  currentVersionIndex
-                )}`,
-                {
-                  method: "DELETE",
-                }
+              documents.filter((document) =>
+                isAfter(
+                  new Date(document.createdAt),
+                  new Date(timestamp)
+                )
               ),
-              {
-                optimisticData: documents
-                  ? [
-                      ...documents.filter((document) =>
-                        isAfter(
-                          new Date(document.createdAt),
-                          new Date(
-                            getDocumentTimestampByIndex(
-                              documents,
-                              currentVersionIndex
-                            )
-                          )
-                        )
-                      ),
-                    ]
-                  : [],
-              }
+              { revalidate: false }
             );
+
+            setIsMutating(false);
           }}
         >
           <div>Restore this version</div>

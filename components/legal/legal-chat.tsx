@@ -6,6 +6,7 @@ import { MicIcon, PaperclipIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { useLegalChat } from "@/hooks/use-legal-chat";
+import { extractText, getOssUrlsWithRetry, recognizeVoice } from "@/lib/api";
 import type { LegalAttachment, LegalMessage, LegalStep } from "@/lib/legal/types";
 import { cn } from "@/lib/utils";
 import { AttachmentAnalysisCard } from "./attachment-analysis";
@@ -459,125 +460,61 @@ export function LegalChat() {
     setAttachments([]);
   };
 
-  // 获取 OSS 文件 URL（带重试机制，因为后端异步上传 OSS）
-  const fetchOssUrls = useCallback(async (
-    ossIds: string[],
-    maxRetries = 3,
-    retryDelay = 1500
-  ): Promise<Map<string, string>> => {
-    if (ossIds.length === 0) return new Map();
-
-    const urlMap = new Map<string, string>();
-    let remainingIds = [...ossIds];
-
-    for (let attempt = 0; attempt < maxRetries && remainingIds.length > 0; attempt++) {
-      // 第一次之后等待一段时间再重试
-      if (attempt > 0) {
-        await new Promise((resolve) => setTimeout(resolve, retryDelay));
-      }
-
-      try {
-        const response = await fetch(`/api/textract/oss-info?ossIds=${remainingIds.join(",")}`);
-        if (!response.ok) {
-          console.error("Failed to fetch OSS URLs, attempt:", attempt + 1);
-          continue;
-        }
-
-        const data = await response.json();
-
-        if (Array.isArray(data)) {
-          for (const item of data) {
-            if (item.ossId && item.url) {
-              urlMap.set(String(item.ossId), item.url);
-            }
-          }
-        }
-
-        // 过滤出还未获取到 URL 的 ID
-        remainingIds = remainingIds.filter((id) => !urlMap.has(id));
-      } catch (error) {
-        console.error("Fetch OSS URLs error, attempt:", attempt + 1, error);
-      }
-    }
-
-    return urlMap;
-  }, []);
-
   // 上传文件到 Textract 服务（同时进行 OCR 和 OSS 存储）
   const uploadFilesToTextract = useCallback(async (
     files: File[],
     scene: string
   ): Promise<LegalAttachment[]> => {
-    const formData = new FormData();
-    for (const file of files) {
-      formData.append("files", file);
-    }
-    formData.append("scene", scene);
+    const result = await extractText(files, scene);
 
-    try {
-      const response = await fetch("/api/textract", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        toast.error("文件处理失败");
-        return [];
-      }
-
-      const data = await response.json();
-
-      // 解析响应，创建附件列表
-      const attachmentList: LegalAttachment[] = [];
-      const ossIds: string[] = [];
-
-      if (data.results && Array.isArray(data.results)) {
-        for (const result of data.results) {
-          // 找到对应的原始文件（用于创建本地预览 URL）
-          const originalFile = files.find((f) => f.name === result.filename);
-          const localUrl = originalFile ? URL.createObjectURL(originalFile) : undefined;
-
-          const ossId = result.ossId || result.filename;
-          if (result.ossId) {
-            ossIds.push(result.ossId);
-          }
-
-          attachmentList.push({
-            attachment_id: ossId,
-            file_name: result.filename,
-            content_type: originalFile?.type || "application/octet-stream",
-            local_url: localUrl,
-            text_content: result.status === "success" ? result.text : undefined,
-            is_extracting: false,
-            extraction_error: result.status === "failed" ? (result.error || "处理失败") : undefined,
-          });
-        }
-      }
-
-      // 异步获取 OSS URL（不阻塞返回）
-      if (ossIds.length > 0) {
-        fetchOssUrls(ossIds).then((urlMap) => {
-          if (urlMap.size > 0) {
-            setAttachments((prev) =>
-              prev.map((a) => {
-                const ossUrl = urlMap.get(a.attachment_id);
-                if (ossUrl) {
-                  return { ...a, file_url: ossUrl };
-                }
-                return a;
-              })
-            );
-          }
-        });
-      }
-
-      return attachmentList;
-    } catch (error) {
-      console.error("Textract error:", error);
-      toast.error("文件处理失败");
+    if (!result.success || !result.data?.results) {
       return [];
     }
-  }, [fetchOssUrls]);
+
+    // 解析响应，创建附件列表
+    const attachmentList: LegalAttachment[] = [];
+    const ossIds: string[] = [];
+
+    for (const textractResult of result.data.results) {
+      // 找到对应的原始文件（用于创建本地预览 URL）
+      const originalFile = files.find((f) => f.name === textractResult.filename);
+      const localUrl = originalFile ? URL.createObjectURL(originalFile) : undefined;
+
+      const ossId = textractResult.ossId || textractResult.filename;
+      if (textractResult.ossId) {
+        ossIds.push(textractResult.ossId);
+      }
+
+      attachmentList.push({
+        attachment_id: ossId,
+        file_name: textractResult.filename,
+        content_type: originalFile?.type || "application/octet-stream",
+        local_url: localUrl,
+        text_content: textractResult.status === "success" ? textractResult.text : undefined,
+        is_extracting: false,
+        extraction_error: textractResult.status === "failed" ? (textractResult.error || "处理失败") : undefined,
+      });
+    }
+
+    // 异步获取 OSS URL（不阻塞返回）
+    if (ossIds.length > 0) {
+      getOssUrlsWithRetry(ossIds).then((urlMap) => {
+        if (urlMap.size > 0) {
+          setAttachments((prev) =>
+            prev.map((a) => {
+              const ossUrl = urlMap.get(a.attachment_id);
+              if (ossUrl) {
+                return { ...a, file_url: ossUrl };
+              }
+              return a;
+            })
+          );
+        }
+      });
+    }
+
+    return attachmentList;
+  }, []);
 
   // 处理文件选择
   const handleFileChange = useCallback(
@@ -624,44 +561,21 @@ export function LegalChat() {
   // 语音录制完成后处理（只填充文本，不添加附件）
   const handleVoiceRecordingComplete = useCallback(
     async (blob: Blob, _duration: number) => {
-      const fileName = `voice_${Date.now()}.webm`;
-      const file = new File([blob], fileName, { type: blob.type });
+      const result = await recognizeVoice(blob);
 
-      try {
-        // 调用 textract API 进行语音识别
-        const formData = new FormData();
-        formData.append("files", file);
-        formData.append("scene", "voice");
-
-        const response = await fetch("/api/textract", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!response.ok) {
-          toast.error("语音识别失败");
-          return;
-        }
-
-        const data = await response.json();
-
-        // 提取识别的文本
-        if (data.results && Array.isArray(data.results) && data.results.length > 0) {
-          const result = data.results[0];
-          if (result.status === "success" && result.text) {
-            // 只填充文本到输入框，不添加附件
-            setInputValue((prev) =>
-              prev ? `${prev} ${result.text}` : result.text
-            );
-          } else if (result.status === "failed") {
-            toast.error(result.error || "语音识别失败");
-          }
-        } else {
-          toast.error("语音识别失败");
-        }
-      } catch (error) {
-        console.error("Voice recognition error:", error);
+      if (!result.success || !result.data?.results?.length) {
         toast.error("语音识别失败");
+        return;
+      }
+
+      const voiceResult = result.data.results[0];
+      if (voiceResult.status === "success" && voiceResult.text) {
+        // 只填充文本到输入框，不添加附件
+        setInputValue((prev) =>
+          prev ? `${prev} ${voiceResult.text}` : voiceResult.text
+        );
+      } else if (voiceResult.status === "failed") {
+        toast.error(voiceResult.error || "语音识别失败");
       }
     },
     []

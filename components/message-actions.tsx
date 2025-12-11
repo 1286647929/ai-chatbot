@@ -3,6 +3,7 @@ import { memo } from "react";
 import { toast } from "sonner";
 import { useSWRConfig } from "swr";
 import { useCopyToClipboard } from "usehooks-ts";
+import { voteAsync } from "@/lib/api";
 import type { Vote } from "@/lib/db/schema";
 import type { ChatMessage } from "@/lib/types";
 import { Action, Actions } from "./elements/actions";
@@ -77,45 +78,39 @@ export function PureMessageActions({
         data-testid="message-upvote"
         disabled={vote?.isUpvoted}
         onClick={() => {
-          const upvote = fetch("/api/vote", {
-            method: "PATCH",
-            body: JSON.stringify({
-              chatId,
-              messageId: message.id,
-              type: "up",
-            }),
-          });
+          toast.promise(
+            voteAsync({ chatId, messageId: message.id, type: "up" }),
+            {
+              loading: "正在点赞...",
+              success: () => {
+                mutate<Vote[]>(
+                  `/api/vote?chatId=${chatId}`,
+                  (currentVotes) => {
+                    if (!currentVotes) {
+                      return [];
+                    }
 
-          toast.promise(upvote, {
-            loading: "正在点赞...",
-            success: () => {
-              mutate<Vote[]>(
-                `/api/vote?chatId=${chatId}`,
-                (currentVotes) => {
-                  if (!currentVotes) {
-                    return [];
-                  }
+                    const votesWithoutCurrent = currentVotes.filter(
+                      (currentVote) => currentVote.messageId !== message.id
+                    );
 
-                  const votesWithoutCurrent = currentVotes.filter(
-                    (currentVote) => currentVote.messageId !== message.id
-                  );
+                    return [
+                      ...votesWithoutCurrent,
+                      {
+                        chatId,
+                        messageId: message.id,
+                        isUpvoted: true,
+                      },
+                    ];
+                  },
+                  { revalidate: false }
+                );
 
-                  return [
-                    ...votesWithoutCurrent,
-                    {
-                      chatId,
-                      messageId: message.id,
-                      isUpvoted: true,
-                    },
-                  ];
-                },
-                { revalidate: false }
-              );
-
-              return "已点赞！";
-            },
-            error: "点赞失败。",
-          });
+                return "已点赞！";
+              },
+              error: "点赞失败。",
+            }
+          );
         }}
         tooltip="点赞"
       >
@@ -126,45 +121,39 @@ export function PureMessageActions({
         data-testid="message-downvote"
         disabled={vote && !vote.isUpvoted}
         onClick={() => {
-          const downvote = fetch("/api/vote", {
-            method: "PATCH",
-            body: JSON.stringify({
-              chatId,
-              messageId: message.id,
-              type: "down",
-            }),
-          });
+          toast.promise(
+            voteAsync({ chatId, messageId: message.id, type: "down" }),
+            {
+              loading: "正在踩...",
+              success: () => {
+                mutate<Vote[]>(
+                  `/api/vote?chatId=${chatId}`,
+                  (currentVotes) => {
+                    if (!currentVotes) {
+                      return [];
+                    }
 
-          toast.promise(downvote, {
-            loading: "正在踩...",
-            success: () => {
-              mutate<Vote[]>(
-                `/api/vote?chatId=${chatId}`,
-                (currentVotes) => {
-                  if (!currentVotes) {
-                    return [];
-                  }
+                    const votesWithoutCurrent = currentVotes.filter(
+                      (currentVote) => currentVote.messageId !== message.id
+                    );
 
-                  const votesWithoutCurrent = currentVotes.filter(
-                    (currentVote) => currentVote.messageId !== message.id
-                  );
+                    return [
+                      ...votesWithoutCurrent,
+                      {
+                        chatId,
+                        messageId: message.id,
+                        isUpvoted: false,
+                      },
+                    ];
+                  },
+                  { revalidate: false }
+                );
 
-                  return [
-                    ...votesWithoutCurrent,
-                    {
-                      chatId,
-                      messageId: message.id,
-                      isUpvoted: false,
-                    },
-                  ];
-                },
-                { revalidate: false }
-              );
-
-              return "已踩！";
-            },
-            error: "踩失败。",
-          });
+                return "已踩！";
+              },
+              error: "踩失败。",
+            }
+          );
         }}
         tooltip="踩"
       >

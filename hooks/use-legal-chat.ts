@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 
+import { legalInteract } from "@/lib/api";
 import { readSSEStreamWithAbort } from "@/lib/legal/stream-parser";
 import type {
   DocumentPath,
@@ -495,38 +496,22 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
       // 添加用户选择消息
       addUserMessage(pathName);
 
-      try {
-        // 通过 message 字段发送路径名称（后端通过名称识别选择）
-        const requestBody: LegalInteractRequest = {
-          session_id: state.sessionId || undefined,
-          message: pathName,
-          stream: false, // 选择路径不使用流式
-        };
+      // 通过 message 字段发送路径名称（后端通过名称识别选择）
+      const result = await legalInteract({
+        session_id: state.sessionId || undefined,
+        message: pathName,
+        stream: false,
+      }, { showErrorToast: false });
 
-        const response = await fetch("/api/legal/interact", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestBody),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Request failed");
-        }
-
-        const data: LegalApiResponse = await response.json();
-
-        // 使用统一的响应处理
-        return handleResponse(data);
-      } catch (error) {
-        setState((prev) => ({
-          ...prev,
-          isLoading: false,
-          error: error instanceof Error ? error.message : "Unknown error",
-        }));
+      if (result.success && result.data) {
+        return handleResponse(result.data);
       }
+
+      setState((prev) => ({
+        ...prev,
+        isLoading: false,
+        error: result.message || "Request failed",
+      }));
     },
     [state.sessionId, handleResponse, addUserMessage]
   );
@@ -544,35 +529,21 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
       error: null,
     }));
 
-    try {
-      const requestBody: LegalInteractRequest = {
-        session_id: state.sessionId || undefined,
-        message: "skip",
-        stream: false,
-      };
+    const result = await legalInteract({
+      session_id: state.sessionId || undefined,
+      message: "skip",
+      stream: false,
+    }, { showErrorToast: false });
 
-      const response = await fetch("/api/legal/interact", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Request failed");
-      }
-
-      const data: LegalApiResponse = await response.json();
-      return handleResponse(data);
-    } catch (error) {
-      setState((prev) => ({
-        ...prev,
-        isLoading: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      }));
+    if (result.success && result.data) {
+      return handleResponse(result.data);
     }
+
+    setState((prev) => ({
+      ...prev,
+      isLoading: false,
+      error: result.message || "Request failed",
+    }));
   }, [state.sessionId, handleResponse]);
 
   // 提交补充信息
@@ -584,35 +555,21 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
         error: null,
       }));
 
-      try {
-        const requestBody: LegalInteractRequest = {
-          session_id: state.sessionId || undefined,
-          message: JSON.stringify(fieldValues),
-          stream: false,
-        };
+      const result = await legalInteract({
+        session_id: state.sessionId || undefined,
+        message: JSON.stringify(fieldValues),
+        stream: false,
+      }, { showErrorToast: false });
 
-        const response = await fetch("/api/legal/interact", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestBody),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || "Request failed");
-        }
-
-        const data: LegalApiResponse = await response.json();
-        return handleResponse(data);
-      } catch (error) {
-        setState((prev) => ({
-          ...prev,
-          isLoading: false,
-          error: error instanceof Error ? error.message : "Unknown error",
-        }));
+      if (result.success && result.data) {
+        return handleResponse(result.data);
       }
+
+      setState((prev) => ({
+        ...prev,
+        isLoading: false,
+        error: result.message || "Request failed",
+      }));
     },
     [state.sessionId, handleResponse]
   );
@@ -652,27 +609,18 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
       error: null,
     }));
 
-    try {
-      const response = await fetch("/api/legal/interact", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({}),
-      });
+    const result = await legalInteract({}, {
+      showErrorToast: false,
+      errorMessage: "初始化会话失败",
+    });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to initialize session");
-      }
-
-      const data: LegalApiResponse = await response.json();
-      handleResponse(data);
-    } catch (error) {
+    if (result.success && result.data) {
+      handleResponse(result.data);
+    } else {
       setState((prev) => ({
         ...prev,
         isLoading: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: result.message || "Failed to initialize session",
       }));
     }
   }, [handleResponse]);

@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { useLocalStorage, useWindowSize } from "usehooks-ts";
 import { saveChatModelAsCookie } from "@/app/(chat)/actions";
 import { SelectItem } from "@/components/ui/select";
+import { uploadFile as uploadFileApi } from "@/lib/api";
 import { chatModels } from "@/lib/ai/models";
 import type { Attachment, ChatMessage } from "@/lib/types";
 import type { AppUsage } from "@/lib/usage";
@@ -171,30 +172,18 @@ function PureMultimodalInput({
   ]);
 
   const uploadFile = useCallback(async (file: File) => {
-    const formData = new FormData();
-    formData.append("file", file);
+    const result = await uploadFileApi(file);
 
-    try {
-      const response = await fetch("/api/files/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const { url, pathname, contentType } = data;
-
-        return {
-          url,
-          name: pathname,
-          contentType,
-        };
-      }
-      const { error } = await response.json();
-      toast.error(error);
-    } catch (_error) {
-      toast.error("文件上传失败，请重试！");
+    if (result.success && result.data) {
+      const { url, pathname, contentType } = result.data;
+      return {
+        url,
+        name: pathname,
+        contentType,
+      };
     }
+
+    return undefined;
   }, []);
 
   const contextProps = useMemo(

@@ -23,6 +23,7 @@ import {
   SidebarMenu,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { deleteChatAsync } from "@/lib/api";
 import type { Chat } from "@/lib/db/schema";
 import { fetcher } from "@/lib/utils";
 import { LoaderIcon } from "./icons";
@@ -124,11 +125,9 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
     : false;
 
   const handleDelete = () => {
-    const deletePromise = fetch(`/api/chat?id=${deleteId}`, {
-      method: "DELETE",
-    });
+    if (!deleteId) return;
 
-    toast.promise(deletePromise, {
+    toast.promise(deleteChatAsync(deleteId), {
       loading: "正在删除对话...",
       success: () => {
         mutate((chatHistories) => {

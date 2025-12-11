@@ -17,6 +17,7 @@ import { imageArtifact } from "@/artifacts/image/client";
 import { sheetArtifact } from "@/artifacts/sheet/client";
 import { textArtifact } from "@/artifacts/text/client";
 import { useArtifact } from "@/hooks/use-artifact";
+import { post } from "@/lib/api";
 import type { Document, Vote } from "@/lib/db/schema";
 import type { Attachment, ChatMessage } from "@/lib/types";
 import { fetcher } from "@/lib/utils";
@@ -147,14 +148,11 @@ function PureArtifact({
           }
 
           if (currentDocument.content !== updatedContent) {
-            await fetch(`/api/document?id=${artifact.documentId}`, {
-              method: "POST",
-              body: JSON.stringify({
-                title: artifact.title,
-                content: updatedContent,
-                kind: artifact.kind,
-              }),
-            });
+            await post(`/api/document?id=${artifact.documentId}`, {
+              title: artifact.title,
+              content: updatedContent,
+              kind: artifact.kind,
+            }, { showErrorToast: false });
 
             setIsContentDirty(false);
 

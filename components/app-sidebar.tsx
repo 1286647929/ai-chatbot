@@ -22,6 +22,7 @@ import {
   SidebarMenu,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { deleteAllHistoryAsync } from "@/lib/api";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,11 +42,7 @@ export function AppSidebar({ user }: { user: User | undefined }) {
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
 
   const handleDeleteAll = () => {
-    const deletePromise = fetch("/api/history", {
-      method: "DELETE",
-    });
-
-    toast.promise(deletePromise, {
+    toast.promise(deleteAllHistoryAsync(), {
       loading: "正在删除所有对话...",
       success: () => {
         mutate(unstable_serialize(getChatHistoryPaginationKey));
