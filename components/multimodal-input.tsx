@@ -41,6 +41,7 @@ import {
   PaperclipIcon,
   StopIcon,
 } from "./icons";
+import { VoiceInput } from "./legal/voice-input";
 import { PreviewAttachment } from "./preview-attachment";
 import { SuggestedActions } from "./suggested-actions";
 import { Button } from "./ui/button";
@@ -62,6 +63,7 @@ function PureMultimodalInput({
   selectedModelId,
   onModelChange,
   usage,
+  enableVoiceInput = false,
 }: {
   chatId: string;
   input: string;
@@ -78,6 +80,7 @@ function PureMultimodalInput({
   selectedModelId: string;
   onModelChange?: (modelId: string) => void;
   usage?: AppUsage;
+  enableVoiceInput?: boolean;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
@@ -199,6 +202,29 @@ function PureMultimodalInput({
       usage,
     }),
     [usage]
+  );
+
+  // 语音录制完成后处理
+  const handleVoiceRecordingComplete = useCallback(
+    async (blob: Blob, _duration: number) => {
+      const fileName = `voice_${Date.now()}.webm`;
+      const file = new File([blob], fileName, { type: blob.type });
+
+      setUploadQueue([fileName]);
+
+      try {
+        const uploaded = await uploadFile(file);
+        if (uploaded) {
+          setAttachments((curr) => [...curr, uploaded]);
+        }
+      } catch (error) {
+        console.error("Error uploading voice recording:", error);
+        toast.error("语音上传失败");
+      } finally {
+        setUploadQueue([]);
+      }
+    },
+    [uploadFile, setAttachments]
   );
 
   const handleFileChange = useCallback(
@@ -367,13 +393,19 @@ function PureMultimodalInput({
           />{" "}
           <Context {...contextProps} />
         </div>
-        <PromptInputToolbar className="!border-top-0 border-t-0! p-0 shadow-none dark:border-0 dark:border-transparent!">
+        <PromptInputToolbar className="border-t-0! border-top-0! p-0 shadow-none dark:border-0 dark:border-transparent!">
           <PromptInputTools className="gap-0 sm:gap-0.5">
             <AttachmentsButton
               fileInputRef={fileInputRef}
               selectedModelId={selectedModelId}
               status={status}
             />
+            {enableVoiceInput && (
+              <VoiceInput
+                disabled={status !== "ready"}
+                onRecordingComplete={handleVoiceRecordingComplete}
+              />
+            )}
             <ModelSelectorCompact
               onModelChange={onModelChange}
               selectedModelId={selectedModelId}
@@ -414,6 +446,9 @@ export const MultimodalInput = memo(
       return false;
     }
     if (prevProps.selectedModelId !== nextProps.selectedModelId) {
+      return false;
+    }
+    if (prevProps.enableVoiceInput !== nextProps.enableVoiceInput) {
       return false;
     }
 

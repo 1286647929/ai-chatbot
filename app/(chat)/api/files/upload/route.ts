@@ -3,17 +3,37 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { auth } from "@/app/(auth)/auth";
+import { generateUUID } from "@/lib/utils";
+
+// 支持的文件类型
+const SUPPORTED_FILE_TYPES = [
+  // 图片
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  // 文档
+  "application/pdf",
+  // 音频
+  "audio/webm",
+  "audio/wav",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/x-m4a",
+] as const;
+
+// 最大文件大小 10MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 // Use Blob instead of File since File is not available in Node.js environment
 const FileSchema = z.object({
   file: z
     .instanceof(Blob)
-    .refine((file) => file.size <= 5 * 1024 * 1024, {
-      message: "File size should be less than 5MB",
+    .refine((file) => file.size <= MAX_FILE_SIZE, {
+      message: "File size should be less than 10MB",
     })
-    // Update the file type based on the kind of files you want to accept
-    .refine((file) => ["image/jpeg", "image/png"].includes(file.type), {
-      message: "File type should be JPEG or PNG",
+    .refine((file) => SUPPORTED_FILE_TYPES.includes(file.type as any), {
+      message: `File type should be one of: ${SUPPORTED_FILE_TYPES.join(", ")}`,
     }),
 });
 
@@ -51,11 +71,16 @@ export async function POST(request: Request) {
     const fileBuffer = await file.arrayBuffer();
 
     try {
-      const data = await put(`${filename}`, fileBuffer, {
+      const fileId = generateUUID();
+      const data = await put(`${fileId}-${filename}`, fileBuffer, {
         access: "public",
       });
 
-      return NextResponse.json(data);
+      return NextResponse.json({
+        ...data,
+        fileId,
+        contentType: file.type,
+      });
     } catch (_error) {
       return NextResponse.json({ error: "Upload failed" }, { status: 500 });
     }
