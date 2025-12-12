@@ -14,6 +14,18 @@ const filePartSchema = z.object({
 
 const partSchema = z.union([textPartSchema, filePartSchema]);
 
+/**
+ * Agent 模式枚举
+ * - default: 默认单 Agent 模式
+ * - legal: 法律多 Agent 模式
+ */
+export const AgentMode = {
+  DEFAULT: "default",
+  LEGAL: "legal",
+} as const;
+
+export type AgentMode = (typeof AgentMode)[keyof typeof AgentMode];
+
 export const postRequestBodySchema = z.object({
   id: z.string().uuid(),
   message: z.object({
@@ -23,6 +35,8 @@ export const postRequestBodySchema = z.object({
   }),
   selectedChatModel: z.enum(["chat-model", "chat-model-reasoning"]),
   selectedVisibilityType: z.enum(["public", "private"]),
+  /** Agent 模式：default-默认单 Agent，legal-法律多 Agent */
+  agentMode: z.enum(["default", "legal"]).default("default").optional(),
 });
 
 export type PostRequestBody = z.infer<typeof postRequestBodySchema>;

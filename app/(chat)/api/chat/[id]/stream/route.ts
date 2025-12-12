@@ -11,6 +11,12 @@ import { ChatSDKError } from "@/lib/errors";
 import type { ChatMessage } from "@/lib/types";
 import { getStreamContext } from "../../route";
 
+const SSE_HEADERS = {
+  "Content-Type": "text/event-stream",
+  "Cache-Control": "no-cache",
+  Connection: "keep-alive",
+};
+
 export async function GET(
   _: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -80,17 +86,17 @@ export async function GET(
     const mostRecentMessage = messages.at(-1);
 
     if (!mostRecentMessage) {
-      return new Response(emptyDataStream, { status: 200 });
+      return new Response(emptyDataStream, { status: 200, headers: SSE_HEADERS });
     }
 
     if (mostRecentMessage.role !== "assistant") {
-      return new Response(emptyDataStream, { status: 200 });
+      return new Response(emptyDataStream, { status: 200, headers: SSE_HEADERS });
     }
 
     const messageCreatedAt = new Date(mostRecentMessage.createdAt);
 
     if (differenceInSeconds(resumeRequestedAt, messageCreatedAt) > 15) {
-      return new Response(emptyDataStream, { status: 200 });
+      return new Response(emptyDataStream, { status: 200, headers: SSE_HEADERS });
     }
 
     const restoredStream = createUIMessageStream<ChatMessage>({
@@ -105,9 +111,9 @@ export async function GET(
 
     return new Response(
       restoredStream.pipeThrough(new JsonToSseTransformStream()),
-      { status: 200 }
+      { status: 200, headers: SSE_HEADERS }
     );
   }
 
-  return new Response(stream, { status: 200 });
+  return new Response(stream, { status: 200, headers: SSE_HEADERS });
 }

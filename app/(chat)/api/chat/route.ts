@@ -1,11 +1,13 @@
 import { geolocation } from "@vercel/functions";
 import {
   convertToModelMessages,
+  type CoreMessage,
   createUIMessageStream,
   JsonToSseTransformStream,
   smoothStream,
   stepCountIs,
   streamText,
+  type UIMessageStreamWriter,
 } from "ai";
 import { unstable_cache as cache } from "next/cache";
 import { after } from "next/server";
@@ -17,11 +19,15 @@ import type { ModelCatalog } from "tokenlens/core";
 import { fetchModels } from "tokenlens/fetch";
 import { getUsage } from "tokenlens/helpers";
 import { auth, type UserType } from "@/app/(auth)/auth";
+import type { Session } from "next-auth";
 import type { VisibilityType } from "@/components/visibility-selector";
+import { type AgentContext } from "@/lib/ai/agents/types";
 import { entitlementsByUserType } from "@/lib/ai/entitlements";
 import type { ChatModel } from "@/lib/ai/models";
+import { orchestrateStream } from "@/lib/ai/orchestrator";
 import { type RequestHints, systemPrompt } from "@/lib/ai/prompts";
 import { myProvider } from "@/lib/ai/providers";
+import { shouldUseMultiAgentMode } from "@/lib/ai/router";
 import { createDocument } from "@/lib/ai/tools/create-document";
 import { getWeather } from "@/lib/ai/tools/get-weather";
 import { requestSuggestions } from "@/lib/ai/tools/request-suggestions";
@@ -43,7 +49,11 @@ import type { ChatMessage } from "@/lib/types";
 import type { AppUsage } from "@/lib/usage";
 import { convertToUIMessages, generateUUID } from "@/lib/utils";
 import { generateTitleFromUserMessage } from "../../actions";
-import { type PostRequestBody, postRequestBodySchema } from "./schema";
+import {
+  AgentMode,
+  type PostRequestBody,
+  postRequestBodySchema,
+} from "./schema";
 
 export const maxDuration = 60;
 
@@ -101,11 +111,13 @@ export async function POST(request: Request) {
       message,
       selectedChatModel,
       selectedVisibilityType,
+      agentMode = AgentMode.DEFAULT,
     }: {
       id: string;
       message: ChatMessage;
       selectedChatModel: ChatModel["id"];
       selectedVisibilityType: VisibilityType;
+      agentMode?: (typeof AgentMode)[keyof typeof AgentMode];
     } = requestBody;
 
     const session = await auth();
@@ -177,77 +189,63 @@ export async function POST(request: Request) {
 
     let finalMergedUsage: AppUsage | undefined;
 
+    // 判断是否使用法律多 Agent 模式
+    const useLegalMultiAgent =
+      agentMode === AgentMode.LEGAL && shouldUseMultiAgentMode();
+
+    // 提取用户消息文本
+    const userMessageText = message.parts
+      .filter((p): p is { type: "text"; text: string } => p.type === "text")
+      .map((p) => p.text)
+      .join("\n");
+
     const stream = createUIMessageStream({
-      execute: ({ writer: dataStream }) => {
-        const result = streamText({
-          model: myProvider.languageModel(selectedChatModel),
-          system: systemPrompt({ selectedChatModel, requestHints }),
-          messages: convertToModelMessages(uiMessages),
-          stopWhen: stepCountIs(5),
-          experimental_activeTools:
-            selectedChatModel === "chat-model-reasoning"
-              ? []
-              : [
-                  "getWeather",
-                  "createDocument",
-                  "updateDocument",
-                  "requestSuggestions",
-                ],
-          experimental_transform: smoothStream({ chunking: "word" }),
-          tools: {
-            getWeather,
-            createDocument: createDocument({ session, dataStream }),
-            updateDocument: updateDocument({ session, dataStream }),
-            requestSuggestions: requestSuggestions({
-              session,
-              dataStream,
-            }),
-          },
-          experimental_telemetry: {
-            isEnabled: isProductionEnvironment,
-            functionId: "stream-text",
-          },
-          onFinish: async ({ usage }) => {
-            try {
-              const providers = await getTokenlensCatalog();
-              const modelId =
-                myProvider.languageModel(selectedChatModel).modelId;
-              if (!modelId) {
-                finalMergedUsage = usage;
-                dataStream.write({
-                  type: "data-usage",
-                  data: finalMergedUsage,
-                });
-                return;
-              }
-
-              if (!providers) {
-                finalMergedUsage = usage;
-                dataStream.write({
-                  type: "data-usage",
-                  data: finalMergedUsage,
-                });
-                return;
-              }
-
-              const summary = getUsage({ modelId, usage, providers });
-              finalMergedUsage = { ...usage, ...summary, modelId } as AppUsage;
-              dataStream.write({ type: "data-usage", data: finalMergedUsage });
-            } catch (err) {
-              console.warn("TokenLens enrichment failed", err);
+      execute: async ({ writer: dataStream }) => {
+        if (useLegalMultiAgent) {
+          // 法律多 Agent 模式
+          await executeLegalMultiAgentStream({
+            chatId: id,
+            userId: session.user.id,
+            userMessage: userMessageText,
+            messages: convertToModelMessages(uiMessages),
+            dataStream,
+            onUsage: (usage) => {
               finalMergedUsage = usage;
-              dataStream.write({ type: "data-usage", data: finalMergedUsage });
-            }
-          },
-        });
+            },
+          });
+        } else {
+          // 默认单 Agent 模式
+          executeDefaultStream({
+            selectedChatModel,
+            requestHints,
+            uiMessages,
+            session,
+            dataStream,
+            onUsage: async (usage) => {
+              try {
+                const providers = await getTokenlensCatalog();
+                const modelId =
+                  myProvider.languageModel(selectedChatModel).modelId;
+                if (!modelId || !providers) {
+                  finalMergedUsage = usage;
+                  dataStream.write({
+                    type: "data-usage",
+                    data: finalMergedUsage,
+                  });
+                  return;
+                }
 
-        result.consumeStream();
-
-        dataStream.merge(
-          result.toUIMessageStream({
-            sendReasoning: true,
-          })
-        );
+                const summary = getUsage({ modelId, usage, providers });
+                finalMergedUsage = { ...usage, ...summary, modelId } as AppUsage;
+                dataStream.write({ type: "data-usage", data: finalMergedUsage });
+              } catch (err) {
+                console.warn("TokenLens enrichment failed", err);
+                finalMergedUsage = usage;
+                dataStream.write({ type: "data-usage", data: finalMergedUsage });
+              }
+            },
+          });
+        }
       },
       generateId: generateUUID,
       onFinish: async ({ messages }) => {
@@ -288,7 +286,13 @@ export async function POST(request: Request) {
     //   );
     // }
 
-    return new Response(stream.pipeThrough(new JsonToSseTransformStream()));
+    return new Response(stream.pipeThrough(new JsonToSseTransformStream()), {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
   } catch (error) {
     const vercelId = request.headers.get("x-vercel-id");
 
@@ -334,4 +338,145 @@ export async function DELETE(request: Request) {
   const deletedChat = await deleteChatById({ id });
 
   return Response.json(deletedChat, { status: 200 });
+}
+
+// ============================================================================
+// 辅助函数
+// ============================================================================
+
+interface DefaultStreamParams {
+  selectedChatModel: ChatModel["id"];
+  requestHints: RequestHints;
+  uiMessages: ChatMessage[];
+  session: Session;
+  dataStream: UIMessageStreamWriter;
+  onUsage: (usage: AppUsage) => void;
+}
+
+/**
+ * 执行默认单 Agent 流式处理
+ */
+function executeDefaultStream({
+  selectedChatModel,
+  requestHints,
+  uiMessages,
+  session,
+  dataStream,
+  onUsage,
+}: DefaultStreamParams) {
+  const startTime = Date.now();
+  let firstChunkLogged = false;
+
+  console.log("[DefaultStream] 开始执行", {
+    timestamp: new Date().toISOString(),
+    model: selectedChatModel,
+    messageCount: uiMessages.length,
+  });
+
+  const result = streamText({
+    model: myProvider.languageModel(selectedChatModel),
+    system: systemPrompt({ selectedChatModel, requestHints }),
+    messages: convertToModelMessages(uiMessages),
+    stopWhen: stepCountIs(5),
+    experimental_activeTools:
+      selectedChatModel === "chat-model-reasoning"
+        ? []
+        : [
+            "getWeather",
+            "createDocument",
+            "updateDocument",
+            "requestSuggestions",
+          ],
+    experimental_transform: smoothStream({ chunking: "word" }),
+    tools: {
+      getWeather,
+      createDocument: createDocument({ session, dataStream }),
+      updateDocument: updateDocument({ session, dataStream }),
+      requestSuggestions: requestSuggestions({
+        session,
+        dataStream,
+      }),
+    },
+    experimental_telemetry: {
+      isEnabled: isProductionEnvironment,
+      functionId: "stream-text",
+    },
+    onChunk: ({ chunk }) => {
+      if (chunk.type === "text-delta" && !firstChunkLogged) {
+        firstChunkLogged = true;
+        console.log("[DefaultStream] 收到第一个 text-delta", {
+          耗时: `${Date.now() - startTime}ms`,
+        });
+      }
+    },
+    onFinish: async ({ usage }) => {
+      console.log("[DefaultStream] 流式响应完成", {
+        总耗时: `${Date.now() - startTime}ms`,
+      });
+      onUsage(usage as AppUsage);
+    },
+  });
+
+  console.log("[DefaultStream] streamText 已调用，开始消费流...");
+
+  result.consumeStream();
+
+  dataStream.merge(
+    result.toUIMessageStream({
+      sendReasoning: true,
+    })
+  );
+
+  console.log("[DefaultStream] 流已合并到 dataStream");
+}
+
+interface LegalMultiAgentStreamParams {
+  chatId: string;
+  userId: string;
+  userMessage: string;
+  messages: CoreMessage[];
+  dataStream: UIMessageStreamWriter;
+  onUsage: (usage: AppUsage) => void;
+}
+
+/**
+ * 执行法律多 Agent 流式处理
+ */
+async function executeLegalMultiAgentStream({
+  chatId,
+  userId,
+  userMessage,
+  messages,
+  dataStream,
+  onUsage,
+}: LegalMultiAgentStreamParams) {
+  // 构建 Agent 上下文
+  const agentContext: AgentContext = {
+    chatId,
+    userId,
+    userMessage,
+    messages,
+  };
+
+  // 使用编排器执行多 Agent 流式处理
+  // 注：当意图为通用对话时，orchestrateStream 会自动使用默认聊天模型
+  const result = await orchestrateStream(agentContext, dataStream);
+
+  // 计算总 token 使用量
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+
+  for (const agentResult of result.agentResults) {
+    if (agentResult.tokens) {
+      totalInputTokens += agentResult.tokens.input;
+      totalOutputTokens += agentResult.tokens.output;
+    }
+  }
+
+  // 回调使用量统计
+  onUsage({
+    inputTokens: totalInputTokens,
+    outputTokens: totalOutputTokens,
+    totalTokens: totalInputTokens + totalOutputTokens,
+  } as AppUsage);
 }

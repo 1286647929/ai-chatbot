@@ -243,9 +243,9 @@ async function executeRequest<TResponse, TBody = unknown>(
   }
 
   // 执行响应拦截器
-  let processedData = responseData;
+  let processedData: TResponse = responseData;
   for (const interceptor of interceptors.response) {
-    processedData = await interceptor(response, processedData);
+    processedData = (await interceptor(response, processedData)) as TResponse;
   }
 
   return {

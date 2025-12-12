@@ -8,6 +8,10 @@ import useSWR, { useSWRConfig } from "swr";
 import { unstable_serialize } from "swr/infinite";
 import { ChatHeader } from "@/components/chat-header";
 import {
+  AgentModeSelector,
+  type AgentModeType,
+} from "@/components/agent-mode-selector";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -75,11 +79,17 @@ export function Chat({
   const [usage, setUsage] = useState<AppUsage | undefined>(initialLastContext);
   const [showCreditCardAlert, setShowCreditCardAlert] = useState(false);
   const [currentModelId, setCurrentModelId] = useState(initialChatModel);
+  const [agentMode, setAgentMode] = useState<AgentModeType>("default");
   const currentModelIdRef = useRef(currentModelId);
+  const agentModeRef = useRef(agentMode);
 
   useEffect(() => {
     currentModelIdRef.current = currentModelId;
   }, [currentModelId]);
+
+  useEffect(() => {
+    agentModeRef.current = agentMode;
+  }, [agentMode]);
 
   const {
     messages,
@@ -104,6 +114,7 @@ export function Chat({
             message: request.messages.at(-1),
             selectedChatModel: currentModelIdRef.current,
             selectedVisibilityType: visibilityType,
+            agentMode: agentModeRef.current,
             ...request.body,
           },
         };
@@ -190,22 +201,33 @@ export function Chat({
 
         <div className="sticky bottom-0 z-1 mx-auto flex w-full max-w-4xl gap-2 border-t-0 bg-background px-2 pb-3 md:px-4 md:pb-4">
           {!isReadonly && (
-            <MultimodalInput
-              attachments={attachments}
-              chatId={id}
-              input={input}
-              messages={messages}
-              onModelChange={setCurrentModelId}
-              selectedModelId={currentModelId}
-              selectedVisibilityType={visibilityType}
-              sendMessage={sendMessage}
-              setAttachments={setAttachments}
-              setInput={setInput}
-              setMessages={setMessages}
-              status={status}
-              stop={stop}
-              usage={usage}
-            />
+            <div className="flex w-full flex-col gap-2">
+              {/* Agent 模式选择器 */}
+              <div className="flex items-center justify-end">
+                <AgentModeSelector
+                  compact
+                  disabled={status === "streaming"}
+                  onChange={setAgentMode}
+                  value={agentMode}
+                />
+              </div>
+              <MultimodalInput
+                attachments={attachments}
+                chatId={id}
+                input={input}
+                messages={messages}
+                onModelChange={setCurrentModelId}
+                selectedModelId={currentModelId}
+                selectedVisibilityType={visibilityType}
+                sendMessage={sendMessage}
+                setAttachments={setAttachments}
+                setInput={setInput}
+                setMessages={setMessages}
+                status={status}
+                stop={stop}
+                usage={usage}
+              />
+            </div>
           )}
         </div>
       </div>

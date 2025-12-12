@@ -43,6 +43,25 @@ export type CustomUIDataTypes = {
   clear: null;
   finish: null;
   usage: AppUsage;
+  // 法律多 Agent 系统扩展
+  /** Agent 状态更新 */
+  "agent-status": {
+    agent: string;
+    status: "idle" | "running" | "completed" | "error" | "timeout";
+    error?: string;
+  };
+  /** Agent 文本增量 */
+  "text-delta": {
+    agent: string;
+    textDelta: string;
+  };
+  /** 路由决策信息 */
+  routing: {
+    intent: string;
+    confidence: number;
+    selectedAgents: string[];
+    reason: string;
+  };
 };
 
 export type ChatMessage = UIMessage<
