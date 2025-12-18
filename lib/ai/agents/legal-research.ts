@@ -1,5 +1,6 @@
 import type { Tool } from "ai";
 import { legalResearchPrompt } from "../prompts/legal/research";
+import { combineWithIdentity } from "../prompts";
 import { myProvider } from "../providers";
 import { BaseAgent } from "./base";
 import { type AgentConfig, AgentType } from "./types";
@@ -13,7 +14,7 @@ const legalResearchConfig: AgentConfig = {
   description:
     "专门负责法律法规检索、条文解读、法律依据查询。擅长解释法律条款的含义、适用范围和相关司法解释。",
   modelId: "legal-research-model",
-  systemPrompt: legalResearchPrompt,
+  systemPrompt: combineWithIdentity(legalResearchPrompt),
   maxDuration: 30_000,
   maxTokens: 4096,
 };

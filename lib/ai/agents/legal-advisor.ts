@@ -1,5 +1,6 @@
 import type { Tool } from "ai";
 import { legalAdvisorPrompt } from "../prompts/legal/advisor";
+import { combineWithIdentity } from "../prompts";
 import { myProvider } from "../providers";
 import { BaseAgent } from "./base";
 import { type AgentConfig, AgentType } from "./types";
@@ -13,7 +14,7 @@ const legalAdvisorConfig: AgentConfig = {
   description:
     "综合性法律咨询专家，整合法律研究和案例分析结果，为用户提供全面的法律建议和解决方案。",
   modelId: "legal-advisor-model",
-  systemPrompt: legalAdvisorPrompt,
+  systemPrompt: combineWithIdentity(legalAdvisorPrompt),
   maxDuration: 45_000,
   maxTokens: 8192,
 };

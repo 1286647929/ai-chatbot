@@ -1,4 +1,4 @@
-import { experimental_createMCPClient as createMCPClient } from "ai";
+import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
 
 /**
  * MCP 服务器配置
@@ -90,7 +90,7 @@ export async function createMcpClient(config: MCPServerConfig) {
         throw new Error("Stdio transport requires a command");
       }
       // 动态导入 stdio 传输（仅在 Node.js 环境可用）
-      const { Experimental_StdioMCPTransport } = await import("ai/mcp-stdio");
+      const { Experimental_StdioMCPTransport } = await import("@ai-sdk/mcp/mcp-stdio");
       const stdioTransport = new Experimental_StdioMCPTransport({
         command: config.command,
         args: config.args || [],

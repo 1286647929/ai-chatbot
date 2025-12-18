@@ -34,8 +34,23 @@ export interface OrchestratorConfig {
   maxRetries: number;
 }
 
+/**
+ * 从环境变量获取 Agent 超时配置
+ * 默认 60 秒，可通过 AGENT_DEFAULT_TIMEOUT 环境变量配置（单位：毫秒）
+ */
+function getAgentTimeout(): number {
+  const envTimeout = process.env.AGENT_DEFAULT_TIMEOUT;
+  if (envTimeout) {
+    const parsed = Number.parseInt(envTimeout, 10);
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return 60_000; // 默认 60 秒
+}
+
 const defaultConfig: OrchestratorConfig = {
-  agentTimeout: 30_000,
+  agentTimeout: getAgentTimeout(),
   enableParallel: true,
   maxRetries: 1,
 };

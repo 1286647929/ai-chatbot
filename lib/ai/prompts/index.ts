@@ -5,6 +5,9 @@
 // 系统提示词
 export {
   regularPrompt,
+  ASSISTANT_NAME,
+  baseIdentityConstraint,
+  combineWithIdentity,
   type RequestHints,
   getRequestPromptFromHints,
 } from "./system";

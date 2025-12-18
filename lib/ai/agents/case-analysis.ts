@@ -1,5 +1,6 @@
 import type { Tool } from "ai";
 import { caseAnalysisPrompt } from "../prompts/legal/case-analysis";
+import { combineWithIdentity } from "../prompts";
 import { myProvider } from "../providers";
 import { BaseAgent } from "./base";
 import { type AgentConfig, AgentType } from "./types";
@@ -13,7 +14,7 @@ const caseAnalysisConfig: AgentConfig = {
   description:
     "专门负责案例检索、判例分析、裁判结果预测。擅长查找类似案件，分析判决依据和赔偿标准。",
   modelId: "case-analysis-model",
-  systemPrompt: caseAnalysisPrompt,
+  systemPrompt: combineWithIdentity(caseAnalysisPrompt),
   maxDuration: 30_000,
   maxTokens: 4096,
 };

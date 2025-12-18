@@ -1,5 +1,6 @@
 import type { Tool } from "ai";
 import { documentDraftPrompt } from "../prompts/legal/document-draft";
+import { combineWithIdentity } from "../prompts";
 import { myProvider } from "../providers";
 import { BaseAgent } from "./base";
 import { type AgentConfig, AgentType } from "./types";
@@ -13,7 +14,7 @@ const documentDraftConfig: AgentConfig = {
   description:
     "专门负责法律文书起草，包括合同、起诉状、律师函、声明书等。能够根据具体情况生成规范的法律文书。",
   modelId: "document-draft-model",
-  systemPrompt: documentDraftPrompt,
+  systemPrompt: combineWithIdentity(documentDraftPrompt),
   maxDuration: 60_000,
   maxTokens: 16_384,
 };

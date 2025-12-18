@@ -92,6 +92,8 @@ Required in `.env.local`:
 
 Optional:
 - `REDIS_URL` - Enables resumable streams
+- `AGENT_DEFAULT_TIMEOUT` - Agent execution timeout in milliseconds (default: 60000)
+- `ENABLE_MULTI_AGENT` - Enable/disable multi-agent mode (default: true)
 
 ## Code Style (Ultracite/Biome)
 
