@@ -23,13 +23,13 @@ import type { Session } from "next-auth";
 import type { VisibilityType } from "@/components/visibility-selector";
 import { type AgentContext } from "@/lib/ai/agents/types";
 import { entitlementsByUserType } from "@/lib/ai/entitlements";
-import type { ChatModel } from "@/lib/ai/models";
+import { getChatModel, type AgentMode as ModelAgentMode } from "@/lib/ai/model-config";
 import { orchestrateStream } from "@/lib/ai/orchestrator";
 import { type RequestHints, systemPrompt } from "@/lib/ai/prompts";
-import { myProvider } from "@/lib/ai/providers";
 import { shouldUseMultiAgentMode } from "@/lib/ai/router";
 import { createDocument } from "@/lib/ai/tools/create-document";
 import { getWeather } from "@/lib/ai/tools/get-weather";
+import { webSearch } from "@/lib/ai/tools/legal/web-search";
 import { requestSuggestions } from "@/lib/ai/tools/request-suggestions";
 import { updateDocument } from "@/lib/ai/tools/update-document";
 import { isProductionEnvironment } from "@/lib/constants";
@@ -109,15 +109,15 @@ export async function POST(request: Request) {
     const {
       id,
       message,
-      selectedChatModel,
       selectedVisibilityType,
       agentMode = AgentMode.DEFAULT,
+      webSearchEnabled = true,
     }: {
       id: string;
       message: ChatMessage;
-      selectedChatModel: ChatModel["id"];
       selectedVisibilityType: VisibilityType;
       agentMode?: (typeof AgentMode)[keyof typeof AgentMode];
+      webSearchEnabled?: boolean;
     } = requestBody;
 
     const session = await auth();
@@ -209,6 +209,7 @@ export async function POST(request: Request) {
             userMessage: userMessageText,
             messages: convertToModelMessages(uiMessages),
             dataStream,
+            webSearchEnabled,
             onUsage: (usage) => {
               finalMergedUsage = usage;
             },
@@ -216,16 +217,17 @@ export async function POST(request: Request) {
         } else {
           // 默认单 Agent 模式
           executeDefaultStream({
-            selectedChatModel,
+            agentMode: agentMode as ModelAgentMode,
             requestHints,
             uiMessages,
             session,
             dataStream,
+            webSearchEnabled,
             onUsage: async (usage) => {
               try {
                 const providers = await getTokenlensCatalog();
-                const modelId =
-                  myProvider.languageModel(selectedChatModel).modelId;
+                const chatModel = getChatModel(agentMode as ModelAgentMode);
+                const modelId = chatModel.modelId;
                 if (!modelId || !providers) {
                   finalMergedUsage = usage;
                   dataStream.write({
@@ -345,11 +347,12 @@ export async function DELETE(request: Request) {
 // ============================================================================
 
 interface DefaultStreamParams {
-  selectedChatModel: ChatModel["id"];
+  agentMode: ModelAgentMode;
   requestHints: RequestHints;
   uiMessages: ChatMessage[];
   session: Session;
   dataStream: UIMessageStreamWriter;
+  webSearchEnabled: boolean;
   onUsage: (usage: AppUsage) => void;
 }
 
@@ -357,46 +360,58 @@ interface DefaultStreamParams {
  * 执行默认单 Agent 流式处理
  */
 function executeDefaultStream({
-  selectedChatModel,
+  agentMode,
   requestHints,
   uiMessages,
   session,
   dataStream,
+  webSearchEnabled,
   onUsage,
 }: DefaultStreamParams) {
   const startTime = Date.now();
   let firstChunkLogged = false;
+  const chatModel = getChatModel(agentMode);
 
   console.log("[DefaultStream] 开始执行", {
     timestamp: new Date().toISOString(),
-    model: selectedChatModel,
+    agentMode,
+    modelId: chatModel.modelId,
     messageCount: uiMessages.length,
+    webSearchEnabled,
   });
 
+  // 构建工具集，根据 webSearchEnabled 条件性添加 webSearch
+  const tools = {
+    getWeather,
+    createDocument: createDocument({ session, dataStream }),
+    updateDocument: updateDocument({ session, dataStream }),
+    requestSuggestions: requestSuggestions({
+      session,
+      dataStream,
+    }),
+    ...(webSearchEnabled ? { webSearch } : {}),
+  };
+
+  // 构建活跃工具列表
+  const baseActiveTools = [
+    "getWeather",
+    "createDocument",
+    "updateDocument",
+    "requestSuggestions",
+  ] as const;
+
+  const activeTools = webSearchEnabled
+    ? [...baseActiveTools, "webSearch" as const]
+    : [...baseActiveTools];
+
   const result = streamText({
-    model: myProvider.languageModel(selectedChatModel),
-    system: systemPrompt({ selectedChatModel, requestHints }),
+    model: chatModel,
+    system: systemPrompt({ requestHints }),
     messages: convertToModelMessages(uiMessages),
     stopWhen: stepCountIs(5),
-    experimental_activeTools:
-      selectedChatModel === "chat-model-reasoning"
-        ? []
-        : [
-            "getWeather",
-            "createDocument",
-            "updateDocument",
-            "requestSuggestions",
-          ],
+    experimental_activeTools: activeTools,
     experimental_transform: smoothStream({ chunking: "word" }),
-    tools: {
-      getWeather,
-      createDocument: createDocument({ session, dataStream }),
-      updateDocument: updateDocument({ session, dataStream }),
-      requestSuggestions: requestSuggestions({
-        session,
-        dataStream,
-      }),
-    },
+    tools,
     experimental_telemetry: {
       isEnabled: isProductionEnvironment,
       functionId: "stream-text",
@@ -436,6 +451,7 @@ interface LegalMultiAgentStreamParams {
   userMessage: string;
   messages: CoreMessage[];
   dataStream: UIMessageStreamWriter;
+  webSearchEnabled: boolean;
   onUsage: (usage: AppUsage) => void;
 }
 
@@ -448,6 +464,7 @@ async function executeLegalMultiAgentStream({
   userMessage,
   messages,
   dataStream,
+  webSearchEnabled,
   onUsage,
 }: LegalMultiAgentStreamParams) {
   // 构建 Agent 上下文
@@ -456,6 +473,9 @@ async function executeLegalMultiAgentStream({
     userId,
     userMessage,
     messages,
+    metadata: {
+      webSearchEnabled,
+    },
   };
 
   // 使用编排器执行多 Agent 流式处理

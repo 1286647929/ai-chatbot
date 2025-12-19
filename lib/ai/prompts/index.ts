@@ -29,20 +29,13 @@ import { regularPrompt, getRequestPromptFromHints, type RequestHints } from "./s
 import { artifactsPrompt } from "./artifacts";
 
 /**
- * 根据模型类型和请求上下文生成系统提示词
+ * 根据请求上下文生成系统提示词
  */
 export const systemPrompt = ({
-  selectedChatModel,
   requestHints,
 }: {
-  selectedChatModel: string;
   requestHints: RequestHints;
 }) => {
   const requestPrompt = getRequestPromptFromHints(requestHints);
-
-  if (selectedChatModel === "chat-model-reasoning") {
-    return `${regularPrompt}\n\n${requestPrompt}`;
-  }
-
   return `${regularPrompt}\n\n${requestPrompt}\n\n${artifactsPrompt}`;
 };

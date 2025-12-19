@@ -1,5 +1,5 @@
 import { generateObject } from "ai";
-import { myProvider } from "../providers";
+import { legalModels } from "../model-config";
 import { isLegalRelated, ruleBasedClassify } from "./rules";
 import {
   defaultClassifierConfig,
@@ -36,7 +36,7 @@ const INTENT_CLASSIFICATION_PROMPT = `你是一个法律意图识别专家。根
 async function llmClassify(message: string): Promise<Intent> {
   try {
     const result = await generateObject({
-      model: myProvider.languageModel("intent-model"),
+      model: legalModels.getIntentModel(),
       schema: LLMIntentOutputSchema,
       system: INTENT_CLASSIFICATION_PROMPT,
       prompt: `用户输入：${message}`,

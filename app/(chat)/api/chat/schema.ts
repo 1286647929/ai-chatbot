@@ -33,10 +33,11 @@ export const postRequestBodySchema = z.object({
     role: z.enum(["user"]),
     parts: z.array(partSchema),
   }),
-  selectedChatModel: z.enum(["chat-model", "chat-model-reasoning"]),
   selectedVisibilityType: z.enum(["public", "private"]),
   /** Agent 模式：default-默认单 Agent，legal-法律多 Agent */
   agentMode: z.enum(["default", "legal"]).default("default").optional(),
+  /** 是否启用 Web 搜索 */
+  webSearchEnabled: z.boolean().default(true).optional(),
 });
 
 export type PostRequestBody = z.infer<typeof postRequestBodySchema>;

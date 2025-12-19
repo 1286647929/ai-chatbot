@@ -1,7 +1,7 @@
 import type { Tool } from "ai";
-import { caseAnalysisPrompt } from "../prompts/legal/case-analysis";
+import { legalModels } from "../model-config";
 import { combineWithIdentity } from "../prompts";
-import { myProvider } from "../providers";
+import { caseAnalysisPrompt } from "../prompts/legal/case-analysis";
 import { BaseAgent } from "./base";
 import { type AgentConfig, AgentType } from "./types";
 
@@ -31,5 +31,5 @@ export function createCaseAnalysisAgent(
     tools,
   };
 
-  return new BaseAgent(config, myProvider.languageModel("case-analysis-model"));
+  return new BaseAgent(config, legalModels.getCaseAnalysisModel());
 }

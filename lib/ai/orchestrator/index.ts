@@ -1,3 +1,4 @@
+import type { Tool } from "ai";
 import { smoothStream, streamText, type UIMessageStreamWriter } from "ai";
 import {
   createAgent,
@@ -13,14 +14,54 @@ import {
   AgentType,
   ERROR_MESSAGES,
 } from "../agents/types";
+import { getChatModel } from "../model-config";
 import { regularPrompt } from "../prompts";
-import { myProvider } from "../providers";
 import { type RoutingDecision, routeToAgent } from "../router";
 import {
   caseAnalysisTools,
   documentDraftTools,
+  legalAdvisorTools,
   legalResearchTools,
+  webSearch,
 } from "../tools/legal";
+import { getAllMcpTools } from "../tools/mcp";
+import { createTraceRecorder, traceStore } from "../tracing";
+
+// MCP 工具缓存（请求级别）
+let mcpToolsCache: Record<string, Tool> | null = null;
+let mcpToolsCacheTime = 0;
+const MCP_TOOLS_CACHE_TTL = 60000; // 1 分钟缓存
+
+/**
+ * 检查是否启用 MCP 工具
+ */
+function isMcpEnabled(): boolean {
+  return process.env.ENABLE_MCP_TOOLS === "true";
+}
+
+/**
+ * 获取 MCP 工具（带缓存）
+ */
+async function getCachedMcpTools(): Promise<Record<string, Tool>> {
+  if (!isMcpEnabled()) {
+    return {};
+  }
+
+  const now = Date.now();
+  if (mcpToolsCache && now - mcpToolsCacheTime < MCP_TOOLS_CACHE_TTL) {
+    return mcpToolsCache;
+  }
+
+  try {
+    mcpToolsCache = await getAllMcpTools();
+    mcpToolsCacheTime = now;
+    console.log(`[Orchestrator] MCP 工具已加载: ${Object.keys(mcpToolsCache).length} 个`);
+    return mcpToolsCache;
+  } catch (error) {
+    console.error("[Orchestrator] MCP 工具加载失败:", error);
+    return {};
+  }
+}
 
 /**
  * 编排器配置
@@ -72,26 +113,69 @@ export interface OrchestratorResult {
 }
 
 /**
- * 根据 Agent 类型获取对应的工具集
+ * 工具选项
  */
-function getToolsForAgent(agentType: AgentType) {
+interface ToolOptions {
+  /** 是否启用 Web 搜索 */
+  webSearchEnabled?: boolean;
+}
+
+/**
+ * 根据 Agent 类型获取对应的基础工具集
+ */
+function getBaseToolsForAgent(agentType: AgentType): Record<string, Tool> | undefined {
   switch (agentType) {
     case AgentType.LEGAL_RESEARCH:
       return legalResearchTools;
     case AgentType.CASE_ANALYSIS:
       return caseAnalysisTools;
+    case AgentType.LEGAL_ADVISOR:
+      return legalAdvisorTools;
     case AgentType.DOCUMENT_DRAFT:
       return documentDraftTools;
     default:
-      return;
+      return undefined;
   }
+}
+
+/**
+ * 根据 Agent 类型获取对应的工具集（支持 MCP 和 webSearchEnabled）
+ */
+async function getToolsForAgent(
+  agentType: AgentType,
+  options: ToolOptions = {}
+): Promise<Record<string, Tool> | undefined> {
+  const { webSearchEnabled = true } = options;
+
+  // 获取基础工具集
+  const baseTools = getBaseToolsForAgent(agentType);
+  if (!baseTools) {
+    return undefined;
+  }
+
+  // 复制工具集以避免修改原始对象
+  let tools: Record<string, Tool> = { ...baseTools };
+
+  // 根据 webSearchEnabled 条件性移除或保留 webSearch
+  if (!webSearchEnabled && "webSearch" in tools) {
+    const { webSearch: _, ...rest } = tools;
+    tools = rest;
+  }
+
+  // 获取 MCP 工具并合并
+  const mcpTools = await getCachedMcpTools();
+  if (Object.keys(mcpTools).length > 0) {
+    tools = { ...tools, ...mcpTools };
+  }
+
+  return tools;
 }
 
 /**
  * 根据 Agent 类型创建 Agent 实例
  */
-function createAgentInstance(agentType: AgentType) {
-  const tools = getToolsForAgent(agentType);
+async function createAgentInstance(agentType: AgentType, options: ToolOptions = {}) {
+  const tools = await getToolsForAgent(agentType, options);
 
   switch (agentType) {
     case AgentType.LEGAL_RESEARCH:
@@ -115,7 +199,9 @@ async function executeAgent(
   context: AgentContext,
   config: OrchestratorConfig
 ): Promise<AgentResult> {
-  const agent = createAgentInstance(agentType);
+  // 从 context.metadata 中获取 webSearchEnabled
+  const webSearchEnabled = context.metadata?.webSearchEnabled !== false;
+  const agent = await createAgentInstance(agentType, { webSearchEnabled });
   let lastError: string | undefined;
 
   for (let attempt = 0; attempt <= config.maxRetries; attempt++) {
@@ -166,7 +252,9 @@ async function streamAgent(
   const agentStartTime = Date.now();
   console.log(`[StreamAgent] 开始执行 ${agentType}`, { timestamp: new Date().toISOString() });
 
-  const agent = createAgentInstance(agentType);
+  // 从 context.metadata 中获取 webSearchEnabled
+  const webSearchEnabled = context.metadata?.webSearchEnabled !== false;
+  const agent = await createAgentInstance(agentType, { webSearchEnabled });
 
   try {
     // 通知前端当前 Agent 开始执行
@@ -416,6 +504,9 @@ export async function orchestrateStream(
   const startTime = Date.now();
   console.log("[Orchestrator] 开始处理请求", { timestamp: new Date().toISOString() });
 
+  // 创建追踪记录器
+  const traceRecorder = createTraceRecorder(context.chatId);
+
   // 1. 路由决策
   console.log("[Orchestrator] 开始意图识别...");
   const routingStartTime = Date.now();
@@ -427,6 +518,10 @@ export async function orchestrateStream(
     选中Agent: routing.selectedAgents,
   });
 
+  // 记录意图和路由决策
+  traceRecorder.recordIntent(routing.intent);
+  traceRecorder.recordRouting(routing.selectedAgents, routing.reason);
+
   // 通知前端路由结果
   dataStream.write({
     type: "data-routing",
@@ -435,6 +530,7 @@ export async function orchestrateStream(
       confidence: routing.intent.confidence,
       selectedAgents: routing.selectedAgents,
       reason: routing.reason,
+      traceId: traceRecorder.getTraceId(),
     },
   });
 
@@ -446,7 +542,7 @@ export async function orchestrateStream(
 
     // 调用默认聊天模型进行流式响应
     const result = streamText({
-      model: myProvider.languageModel("chat-model"),
+      model: getChatModel("default"),
       system: regularPrompt,
       messages: context.messages,
       experimental_transform: smoothStream({ chunking: "word" }),
@@ -484,6 +580,10 @@ export async function orchestrateStream(
       响应长度: finalText.length,
     });
 
+    // 保存追踪（通用对话模式）
+    const trace = traceRecorder.finalize();
+    traceStore.save(trace);
+
     return {
       text: finalText,
       agentResults: [],
@@ -502,6 +602,9 @@ export async function orchestrateStream(
     console.log(`[Orchestrator] 开始执行 Agent: ${agentType}`);
     const agentStartTime = Date.now();
 
+    // 记录 Agent 开始执行
+    traceRecorder.startAgentExecution(agentType);
+
     const result = await streamAgent(
       agentType,
       currentContext,
@@ -514,6 +617,9 @@ export async function orchestrateStream(
       状态: result.status,
     });
 
+    // 记录 Agent 执行结果
+    traceRecorder.endAgentExecution(result);
+
     agentResults.push(result);
 
     if (result.status === AgentStatus.COMPLETED) {
@@ -524,7 +630,11 @@ export async function orchestrateStream(
     }
   }
 
-  // 4. 返回结果
+  // 4. 保存追踪记录
+  const trace = traceRecorder.finalize();
+  traceStore.save(trace);
+
+  // 5. 返回结果
   const text = summarizeResults(agentResults);
   const partialFailure = agentResults.some(
     (r) => r.status !== AgentStatus.COMPLETED
@@ -534,6 +644,7 @@ export async function orchestrateStream(
     总耗时: `${Date.now() - startTime}ms`,
     Agent数量: agentResults.length,
     部分失败: partialFailure,
+    traceId: trace.traceId,
   });
 
   return {

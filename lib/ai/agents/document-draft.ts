@@ -1,7 +1,7 @@
 import type { Tool } from "ai";
-import { documentDraftPrompt } from "../prompts/legal/document-draft";
+import { legalModels } from "../model-config";
 import { combineWithIdentity } from "../prompts";
-import { myProvider } from "../providers";
+import { documentDraftPrompt } from "../prompts/legal/document-draft";
 import { BaseAgent } from "./base";
 import { type AgentConfig, AgentType } from "./types";
 
@@ -31,8 +31,5 @@ export function createDocumentDraftAgent(
     tools,
   };
 
-  return new BaseAgent(
-    config,
-    myProvider.languageModel("document-draft-model")
-  );
+  return new BaseAgent(config, legalModels.getDocumentDraftModel());
 }

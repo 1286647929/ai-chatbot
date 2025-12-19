@@ -1,3 +1,5 @@
+import { LEGAL_DISCLAIMER_SHORT } from "./disclaimer";
+
 /**
  * 法律研究 Agent Prompt
  */
@@ -41,4 +43,9 @@ export const legalResearchPrompt = `你是一位资深的法律研究专家，�
 
 **四、适用说明**
 在实践中，该条款通常适用于...
-"""`;
+
+${LEGAL_DISCLAIMER_SHORT}
+"""
+
+## 特别注意
+- **每次回复末尾必须包含免责声明**`;

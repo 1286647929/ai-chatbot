@@ -1,7 +1,7 @@
 import type { Tool } from "ai";
-import { legalResearchPrompt } from "../prompts/legal/research";
+import { legalModels } from "../model-config";
 import { combineWithIdentity } from "../prompts";
-import { myProvider } from "../providers";
+import { legalResearchPrompt } from "../prompts/legal/research";
 import { BaseAgent } from "./base";
 import { type AgentConfig, AgentType } from "./types";
 
@@ -31,8 +31,5 @@ export function createLegalResearchAgent(
     tools,
   };
 
-  return new BaseAgent(
-    config,
-    myProvider.languageModel("legal-research-model")
-  );
+  return new BaseAgent(config, legalModels.getResearchModel());
 }

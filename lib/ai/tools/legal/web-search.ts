@@ -1,5 +1,11 @@
 import { tool } from "ai";
 import { z } from "zod";
+import {
+  type CacheType,
+  generateSearchCacheKey,
+  getTTLForType,
+  tieredCache,
+} from "../../../cache";
 
 /**
  * 搜索类型
@@ -25,6 +31,19 @@ export type SearchResult = {
 };
 
 /**
+ * 搜索结果包装（包含缓存状态）
+ */
+type SearchResponse = {
+  success: boolean;
+  query: string;
+  type: SearchType;
+  results: SearchResult[];
+  count: number;
+  cached?: boolean;
+  error?: string;
+};
+
+/**
  * Web Search 工具定义
  * 用于搜索网络获取法律相关信息
  */
@@ -41,20 +60,31 @@ export const webSearch = tool({
       ),
     maxResults: z.number().min(1).max(10).default(5).describe("最大返回结果数"),
   }),
-  execute: async (input) => {
+  execute: async (input): Promise<SearchResponse> => {
     const { query, type, maxResults } = input;
     // 根据搜索类型构建增强查询
     const enhancedQuery = buildEnhancedQuery(query, type);
 
+    // 生成缓存键
+    const cacheKey = generateSearchCacheKey(type as CacheType, enhancedQuery, {
+      maxResults,
+    });
+
     try {
-      // 尝试使用配置的搜索 API
-      const results = await executeSearch(enhancedQuery, type, maxResults);
+      // 使用分层缓存
+      const results = await tieredCache.getOrSet<SearchResult[]>(
+        cacheKey,
+        () => executeSearchWithoutCache(enhancedQuery, type, maxResults),
+        getTTLForType(type as CacheType)
+      );
+
       return {
         success: true,
         query: enhancedQuery,
         type,
         results,
         count: results.length,
+        cached: true, // 可能来自缓存
       };
     } catch (error) {
       console.error("[Web Search] Search failed:", error);
@@ -90,15 +120,16 @@ function buildEnhancedQuery(query: string, type: SearchType): string {
 }
 
 /**
- * 执行搜索
+ * 执行搜索（不带缓存）
  * 支持多种搜索 API 的降级策略
+ * 优先级：Perplexity → Bing → 智谱 → Google → Exa → Tavily → SerpAPI → Mock
  */
-async function executeSearch(
+async function executeSearchWithoutCache(
   query: string,
   type: SearchType,
   maxResults: number
 ): Promise<SearchResult[]> {
-  // 1. 检查是否配置了 Perplexity API
+  // 1. 检查是否配置了 Perplexity API（推荐）
   if (process.env.PERPLEXITY_API_KEY) {
     try {
       return await searchWithPerplexity(query, type, maxResults);
@@ -107,7 +138,34 @@ async function executeSearch(
     }
   }
 
-  // 2. 检查是否配置了 Exa API
+  // 2. 检查是否配置了 Bing Search API（国内可用）
+  if (process.env.BING_SEARCH_API_KEY) {
+    try {
+      return await searchWithBing(query, type, maxResults);
+    } catch (_error) {
+      console.warn("[Web Search] Bing search failed, trying fallback");
+    }
+  }
+
+  // 3. 检查是否配置了智谱 AI（国产大模型）
+  if (process.env.ZHIPU_API_KEY) {
+    try {
+      return await searchWithZhipu(query, type, maxResults);
+    } catch (_error) {
+      console.warn("[Web Search] Zhipu search failed, trying fallback");
+    }
+  }
+
+  // 4. 检查是否配置了 Google Custom Search API
+  if (process.env.GOOGLE_SEARCH_API_KEY && process.env.GOOGLE_SEARCH_CX) {
+    try {
+      return await searchWithGoogle(query, type, maxResults);
+    } catch (_error) {
+      console.warn("[Web Search] Google search failed, trying fallback");
+    }
+  }
+
+  // 5. 检查是否配置了 Exa API
   if (process.env.EXA_API_KEY) {
     try {
       return await searchWithExa(query, type, maxResults);
@@ -116,7 +174,7 @@ async function executeSearch(
     }
   }
 
-  // 3. 检查是否配置了 Tavily API
+  // 6. 检查是否配置了 Tavily API
   if (process.env.TAVILY_API_KEY) {
     try {
       return await searchWithTavily(query, type, maxResults);
@@ -125,7 +183,7 @@ async function executeSearch(
     }
   }
 
-  // 4. 检查是否配置了 SerpAPI
+  // 7. 检查是否配置了 SerpAPI
   if (process.env.SERPAPI_API_KEY) {
     try {
       return await searchWithSerpAPI(query, type, maxResults);
@@ -134,7 +192,7 @@ async function executeSearch(
     }
   }
 
-  // 5. 无可用搜索 API，返回模拟结果（开发环境）
+  // 8. 无可用搜索 API，返回模拟结果（开发环境）
   if (process.env.NODE_ENV === "development") {
     return getMockSearchResults(query, type, maxResults);
   }
@@ -294,6 +352,164 @@ async function searchWithSerpAPI(
       url: result.link || "",
       snippet: result.snippet || "",
       source: result.source || "SerpAPI",
+    })
+  );
+}
+
+/**
+ * 使用 Bing Search API 搜索（国内可用）
+ * 获取 API Key: https://www.microsoft.com/en-us/bing/apis/bing-web-search-api
+ */
+async function searchWithBing(
+  query: string,
+  _type: SearchType,
+  maxResults: number
+): Promise<SearchResult[]> {
+  const endpoint = process.env.BING_SEARCH_ENDPOINT || "https://api.bing.microsoft.com/v7.0/search";
+
+  const params = new URLSearchParams({
+    q: query,
+    count: String(maxResults),
+    mkt: "zh-CN",
+    setLang: "zh-Hans",
+  });
+
+  const response = await fetch(`${endpoint}?${params.toString()}`, {
+    headers: {
+      "Ocp-Apim-Subscription-Key": process.env.BING_SEARCH_API_KEY || "",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Bing API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return (data.webPages?.value || []).map(
+    (result: {
+      name?: string;
+      url?: string;
+      snippet?: string;
+      dateLastCrawled?: string;
+    }) => ({
+      title: result.name || "",
+      url: result.url || "",
+      snippet: result.snippet || "",
+      source: "Bing",
+      date: result.dateLastCrawled?.split("T")[0],
+    })
+  );
+}
+
+/**
+ * 使用智谱 AI (GLM) 的 web_search 工具
+ * 获取 API Key: https://open.bigmodel.cn/
+ */
+async function searchWithZhipu(
+  query: string,
+  type: SearchType,
+  maxResults: number
+): Promise<SearchResult[]> {
+  const response = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.ZHIPU_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "glm-4-alltools",
+      messages: [
+        {
+          role: "user",
+          content: `请搜索以下内容并返回前${maxResults}个最相关的结果，格式为JSON数组，每个结果包含title、url、snippet字段：${query}`,
+        },
+      ],
+      tools: [
+        {
+          type: "web_search",
+          web_search: {
+            enable: true,
+            search_query: query,
+          },
+        },
+      ],
+      stream: false,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Zhipu API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+
+  // 解析智谱返回的 web_search 结果
+  const webSearchResults = data.choices?.[0]?.message?.tool_calls?.find(
+    (tc: { type: string }) => tc.type === "web_search"
+  )?.web_search?.search_result;
+
+  if (webSearchResults && Array.isArray(webSearchResults)) {
+    return webSearchResults.slice(0, maxResults).map(
+      (result: { title?: string; link?: string; content?: string }) => ({
+        title: result.title || "",
+        url: result.link || "",
+        snippet: result.content?.substring(0, 300) || "",
+        source: "智谱AI",
+      })
+    );
+  }
+
+  // 如果没有工具调用结果，尝试从文本中解析
+  const content = data.choices?.[0]?.message?.content || "";
+  return [
+    {
+      title: `${type} 搜索结果`,
+      url: "",
+      snippet: content.substring(0, 500),
+      source: "智谱AI",
+    },
+  ];
+}
+
+/**
+ * 使用 Google Custom Search API
+ * 获取 API Key: https://developers.google.com/custom-search/v1/introduction
+ * 获取 CX (Search Engine ID): https://programmablesearchengine.google.com/
+ */
+async function searchWithGoogle(
+  query: string,
+  _type: SearchType,
+  maxResults: number
+): Promise<SearchResult[]> {
+  const params = new URLSearchParams({
+    key: process.env.GOOGLE_SEARCH_API_KEY || "",
+    cx: process.env.GOOGLE_SEARCH_CX || "",
+    q: query,
+    num: String(Math.min(maxResults, 10)), // Google API 最多返回 10 条
+    lr: "lang_zh-CN",
+    gl: "cn",
+  });
+
+  const response = await fetch(
+    `https://www.googleapis.com/customsearch/v1?${params.toString()}`
+  );
+
+  if (!response.ok) {
+    throw new Error(`Google API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return (data.items || []).map(
+    (result: {
+      title?: string;
+      link?: string;
+      snippet?: string;
+      displayLink?: string;
+    }) => ({
+      title: result.title || "",
+      url: result.link || "",
+      snippet: result.snippet || "",
+      source: result.displayLink || "Google",
     })
   );
 }

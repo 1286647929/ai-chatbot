@@ -1,3 +1,5 @@
+import { LEGAL_DISCLAIMER_SHORT } from "./disclaimer";
+
 /**
  * 案例分析 Agent Prompt
  */
@@ -43,7 +45,10 @@ export const caseAnalysisPrompt = `你是一位资深的案例分析专家，专
 
 **参考价值**
 结合您的情况，这个案例说明...
+
+${LEGAL_DISCLAIMER_SHORT}
 """
 
-## 免责声明
-案例分析仅供参考，每个案件都有其特殊性。具体案件的处理结果取决于多种因素，建议咨询专业律师。`;
+## 特别注意
+- 案例分析仅供参考，每个案件都有其特殊性
+- **每次回复末尾必须包含免责声明**`;

@@ -7,10 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { unstable_serialize } from "swr/infinite";
 import { ChatHeader } from "@/components/chat-header";
-import {
-  AgentModeSelector,
-  type AgentModeType,
-} from "@/components/agent-mode-selector";
+import type { AgentModeType } from "@/components/agent-mode-selector";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,7 +24,6 @@ import { useChatVisibility } from "@/hooks/use-chat-visibility";
 import type { Vote } from "@/lib/db/schema";
 import { ChatSDKError } from "@/lib/errors";
 import type { Attachment, ChatMessage } from "@/lib/types";
-import type { AppUsage } from "@/lib/usage";
 import { fetcher, fetchWithErrorHandlers, generateUUID } from "@/lib/utils";
 import { Artifact } from "./artifact";
 import { useDataStream } from "./data-stream-provider";
@@ -40,19 +36,15 @@ import type { VisibilityType } from "./visibility-selector";
 export function Chat({
   id,
   initialMessages,
-  initialChatModel,
   initialVisibilityType,
   isReadonly,
   autoResume,
-  initialLastContext,
 }: {
   id: string;
   initialMessages: ChatMessage[];
-  initialChatModel: string;
   initialVisibilityType: VisibilityType;
   isReadonly: boolean;
   autoResume: boolean;
-  initialLastContext?: AppUsage;
 }) {
   const router = useRouter();
 
@@ -66,7 +58,6 @@ export function Chat({
   // Handle browser back/forward navigation
   useEffect(() => {
     const handlePopState = () => {
-      // When user navigates back/forward, refresh to sync with URL
       router.refresh();
     };
 
@@ -76,20 +67,19 @@ export function Chat({
   const { setDataStream } = useDataStream();
 
   const [input, setInput] = useState<string>("");
-  const [usage, setUsage] = useState<AppUsage | undefined>(initialLastContext);
   const [showCreditCardAlert, setShowCreditCardAlert] = useState(false);
-  const [currentModelId, setCurrentModelId] = useState(initialChatModel);
   const [agentMode, setAgentMode] = useState<AgentModeType>("default");
-  const currentModelIdRef = useRef(currentModelId);
+  const [webSearchEnabled, setWebSearchEnabled] = useState(true);
   const agentModeRef = useRef(agentMode);
-
-  useEffect(() => {
-    currentModelIdRef.current = currentModelId;
-  }, [currentModelId]);
+  const webSearchEnabledRef = useRef(webSearchEnabled);
 
   useEffect(() => {
     agentModeRef.current = agentMode;
   }, [agentMode]);
+
+  useEffect(() => {
+    webSearchEnabledRef.current = webSearchEnabled;
+  }, [webSearchEnabled]);
 
   const {
     messages,
@@ -112,9 +102,9 @@ export function Chat({
           body: {
             id: request.id,
             message: request.messages.at(-1),
-            selectedChatModel: currentModelIdRef.current,
             selectedVisibilityType: visibilityType,
             agentMode: agentModeRef.current,
+            webSearchEnabled: webSearchEnabledRef.current,
             ...request.body,
           },
         };
@@ -122,16 +112,12 @@ export function Chat({
     }),
     onData: (dataPart) => {
       setDataStream((ds) => (ds ? [...ds, dataPart] : []));
-      if (dataPart.type === "data-usage") {
-        setUsage(dataPart.data);
-      }
     },
     onFinish: () => {
       mutate(unstable_serialize(getChatHistoryPaginationKey));
     },
     onError: (error) => {
       if (error instanceof ChatSDKError) {
-        // Check if it's a credit card error
         if (
           error.message?.includes("AI Gateway requires a valid credit card")
         ) {
@@ -193,7 +179,6 @@ export function Chat({
           isReadonly={isReadonly}
           messages={messages}
           regenerate={regenerate}
-          selectedModelId={initialChatModel}
           setMessages={setMessages}
           status={status}
           votes={votes}
@@ -201,33 +186,23 @@ export function Chat({
 
         <div className="sticky bottom-0 z-1 mx-auto flex w-full max-w-4xl gap-2 border-t-0 bg-background px-2 pb-3 md:px-4 md:pb-4">
           {!isReadonly && (
-            <div className="flex w-full flex-col gap-2">
-              {/* Agent 模式选择器 */}
-              <div className="flex items-center justify-end">
-                <AgentModeSelector
-                  compact
-                  disabled={status === "streaming"}
-                  onChange={setAgentMode}
-                  value={agentMode}
-                />
-              </div>
-              <MultimodalInput
-                attachments={attachments}
-                chatId={id}
-                input={input}
-                messages={messages}
-                onModelChange={setCurrentModelId}
-                selectedModelId={currentModelId}
-                selectedVisibilityType={visibilityType}
-                sendMessage={sendMessage}
-                setAttachments={setAttachments}
-                setInput={setInput}
-                setMessages={setMessages}
-                status={status}
-                stop={stop}
-                usage={usage}
-              />
-            </div>
+            <MultimodalInput
+              agentMode={agentMode}
+              attachments={attachments}
+              chatId={id}
+              input={input}
+              messages={messages}
+              onAgentModeChange={setAgentMode}
+              onWebSearchChange={setWebSearchEnabled}
+              selectedVisibilityType={visibilityType}
+              sendMessage={sendMessage}
+              setAttachments={setAttachments}
+              setInput={setInput}
+              setMessages={setMessages}
+              status={status}
+              stop={stop}
+              webSearchEnabled={webSearchEnabled}
+            />
           )}
         </div>
       </div>
@@ -239,7 +214,6 @@ export function Chat({
         isReadonly={isReadonly}
         messages={messages}
         regenerate={regenerate}
-        selectedModelId={currentModelId}
         selectedVisibilityType={visibilityType}
         sendMessage={sendMessage}
         setAttachments={setAttachments}

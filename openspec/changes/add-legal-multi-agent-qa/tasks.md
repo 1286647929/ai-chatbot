@@ -159,7 +159,10 @@
 
 - [x] 11.2 更新 `.env.example` 添加新环境变量
 
-- [ ] 11.3 添加免责声明文本配置
+- [x] 11.3 添加免责声明文本配置
+  - 创建 `lib/ai/prompts/legal/disclaimer.ts`
+  - 定义完整版/简短版免责声明
+  - 定义紧急情况/诉讼时效/刑事案件提示
 
 ## 12. 向量存储与语义记忆（新增）
 
@@ -189,45 +192,47 @@
 
 ## 13. 缓存系统（新增）
 
-- [ ] 13.1 安装 Vercel KV 或 Redis 依赖
+- [x] 13.1 项目已包含 Redis 依赖
+  - 使用 `redis` 包 (^5.0.0)
   - 配置 `REDIS_URL` 环境变量
 
-- [ ] 13.2 实现内存缓存层 `lib/cache/memory.ts`
+- [x] 13.2 实现内存缓存层 `lib/cache/memory.ts`
   - LRU 缓存实现
   - 最大 100 条记录
   - 5 分钟 TTL
 
-- [ ] 13.3 实现持久缓存层 `lib/cache/redis.ts`
+- [x] 13.3 实现持久缓存层 `lib/cache/redis.ts`
   - 查询归一化函数
   - 分类型 TTL 配置
   - 缓存命中统计
 
-- [ ] 13.4 集成缓存中间件
-  - 搜索工具缓存包装
+- [x] 13.4 集成缓存中间件
+  - 搜索工具缓存包装（web-search.ts）
+  - TieredCache 分层缓存
   - 缓存状态日志
 
 ## 14. Word 文书生成（新增）
 
-- [ ] 14.1 安装 docx 依赖
+- [ ] 14.1 安装 docx 依赖（可选，当前使用 Markdown 格式）
   ```bash
   pnpm add docx
   ```
 
-- [ ] 14.2 创建文书模板库 `lib/templates/`
+- [x] 14.2 创建文书模板库 `lib/templates/`
   - 租赁合同模板
-  - 劳动合同模板
   - 民事起诉状模板
   - 律师函模板
+  - 其他模板待扩展
 
-- [ ] 14.3 实现模板填充 `lib/ai/tools/legal/document-generator.ts`
+- [x] 14.3 实现模板填充 `lib/ai/tools/legal/document-generator.ts`
   - 模板加载函数
   - 占位符替换逻辑
-  - 文档打包
+  - 数据验证
 
-- [ ] 14.4 实现文书生成工具 `lib/ai/tools/legal/generate-document.ts`
-  - 定义 tool schema
-  - 集成 Blob 存储上传
-  - 返回下载链接
+- [x] 14.4 实现文书生成工具 `lib/ai/tools/legal/document-generator.ts`
+  - listDocumentTemplates - 列出模板
+  - getDocumentTemplateInfo - 获取模板详情
+  - generateDocument - 生成文书（Markdown 格式）
 
 ## 15. 并行执行与编排（新增）
 
@@ -241,10 +246,11 @@
   - 冲突检测与处理
   - 统一格式输出
 
-- [ ] 15.3 实现 handover 工具 `lib/ai/tools/handover.ts`
+- [x] 15.3 实现 handover 工具 `lib/ai/tools/handover.ts`
   - Agent 间任务传递
   - 上下文携带
-  - 状态追踪
+  - createHandoverTool 工厂函数
+  - 集成到各 Agent 工具集
 
 ## 16. 错误处理与降级（新增）
 
@@ -264,19 +270,21 @@
 
 ## 17. 可观察性（新增）
 
-- [ ] 17.1 创建追踪表 `lib/db/schema.ts`
-  - 添加 `agent_traces` 表
-  - 定义追踪数据结构
+- [ ] 17.1 创建追踪表 `lib/db/schema.ts`（待实现数据库持久化）
+  - 当前使用内存存储
+  - 生产环境需添加数据库表
 
-- [ ] 17.2 实现追踪记录 `lib/ai/tracing/recorder.ts`
+- [x] 17.2 实现追踪记录 `lib/ai/tracing/recorder.ts`
   - 生成 traceId
-  - 记录 Agent 决策链
+  - TraceRecorder 类记录 Agent 决策链
   - 记录工具调用详情
+  - TraceStore 内存存储
 
-- [ ] 17.3 实现追踪查询 API `app/api/admin/traces/route.ts`
+- [x] 17.3 实现追踪查询 API `app/(chat)/api/admin/traces/route.ts`
   - 按 chatId 查询
   - 按时间范围查询
   - 按 Agent 过滤
+  - 分页查询
 
 - [ ] 17.4 创建管理后台页面（可选）
   - 追踪列表视图

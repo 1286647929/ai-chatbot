@@ -1,6 +1,6 @@
-import { routerPrompt } from "../prompts/legal/router";
+import { legalModels } from "../model-config";
 import { combineWithIdentity } from "../prompts";
-import { myProvider } from "../providers";
+import { routerPrompt } from "../prompts/legal/router";
 import { BaseAgent } from "./base";
 import { type AgentConfig, AgentType } from "./types";
 
@@ -21,5 +21,5 @@ const routerConfig: AgentConfig = {
  * 创建 Router Agent
  */
 export function createRouterAgent(): BaseAgent {
-  return new BaseAgent(routerConfig, myProvider.languageModel("intent-model"));
+  return new BaseAgent(routerConfig, legalModels.getIntentModel());
 }

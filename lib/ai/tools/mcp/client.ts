@@ -1,4 +1,5 @@
 import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
+import type { Tool } from "ai";
 
 /**
  * MCP 服务器配置
@@ -227,13 +228,13 @@ export function getMcpServersFromEnv(): MCPServerConfig[] {
  * 获取所有配置的 MCP 工具
  * 合并多个 MCP 服务器的工具
  */
-export async function getAllMcpTools() {
+export async function getAllMcpTools(): Promise<Record<string, Tool>> {
   const servers = getMcpServersFromEnv();
   if (servers.length === 0) {
     return {};
   }
 
-  const allTools: Record<string, unknown> = {};
+  const allTools: Record<string, Tool> = {};
 
   for (const server of servers) {
     try {
@@ -241,7 +242,7 @@ export async function getAllMcpTools() {
       // 为工具添加服务器前缀以避免冲突
       for (const [toolName, tool] of Object.entries(tools)) {
         const prefixedName = servers.length > 1 ? `${server.name}_${toolName}` : toolName;
-        allTools[prefixedName] = tool;
+        allTools[prefixedName] = tool as Tool;
       }
     } catch (error) {
       console.error(`[MCP] Failed to load tools from ${server.name}:`, error);

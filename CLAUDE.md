@@ -94,6 +94,16 @@ Optional:
 - `REDIS_URL` - Enables resumable streams
 - `AGENT_DEFAULT_TIMEOUT` - Agent execution timeout in milliseconds (default: 60000)
 - `ENABLE_MULTI_AGENT` - Enable/disable multi-agent mode (default: true)
+- `ENABLE_MCP_TOOLS` - Enable MCP tools integration (default: false)
+
+### MCP Server Configuration
+
+When `ENABLE_MCP_TOOLS=true`, configure MCP servers with:
+- `MCP_SERVER_<NAME>_URL` - Server URL (for http/sse transport)
+- `MCP_SERVER_<NAME>_TRANSPORT` - Transport type: http, sse, or stdio
+- `MCP_SERVER_<NAME>_TOKEN` - Auth token (optional)
+- `MCP_SERVER_<NAME>_COMMAND` - Command for stdio transport
+- `MCP_SERVER_<NAME>_ARGS` - Comma-separated args for stdio transport
 
 ## Code Style (Ultracite/Biome)
 

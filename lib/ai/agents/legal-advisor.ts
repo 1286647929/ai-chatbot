@@ -1,7 +1,7 @@
 import type { Tool } from "ai";
-import { legalAdvisorPrompt } from "../prompts/legal/advisor";
+import { legalModels } from "../model-config";
 import { combineWithIdentity } from "../prompts";
-import { myProvider } from "../providers";
+import { legalAdvisorPrompt } from "../prompts/legal/advisor";
 import { BaseAgent } from "./base";
 import { type AgentConfig, AgentType } from "./types";
 
@@ -31,5 +31,5 @@ export function createLegalAdvisorAgent(
     tools,
   };
 
-  return new BaseAgent(config, myProvider.languageModel("legal-advisor-model"));
+  return new BaseAgent(config, legalModels.getAdvisorModel());
 }
