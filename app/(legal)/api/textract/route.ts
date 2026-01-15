@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 
-import { auth } from "@/app/(auth)/auth";
 import type { TextractMultipleResponse } from "@/lib/legal/types";
 
 // 最大文件大小 10MB
@@ -28,12 +27,6 @@ function buildHeaders(): HeadersInit {
 }
 
 export async function POST(request: Request) {
-  // 验证认证
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
     const contentType = request.headers.get("content-type") || "";
 

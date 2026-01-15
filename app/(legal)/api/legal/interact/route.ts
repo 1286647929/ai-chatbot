@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { auth } from "@/app/(auth)/auth";
 import type { LegalApiResponse, LegalInteractRequest } from "@/lib/legal/types";
 
 // 请求验证 schema
@@ -44,12 +43,6 @@ function buildHeaders(): HeadersInit {
 }
 
 export async function POST(request: Request) {
-  // 验证认证
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   // 解析和验证请求体
   let requestBody: LegalInteractRequest;
   try {

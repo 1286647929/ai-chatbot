@@ -31,8 +31,8 @@
 
 | 路径 | 文件 | 功能 |
 |------|------|------|
-| `/` | `app/(chat)/page.tsx` | 首页，创建新对话 |
-| `/chat/[id]` | `app/(chat)/chat/[id]/page.tsx` | 对话详情页，加载历史消息 |
+| `/` | `app/(legal)/(site)/page.tsx` | 法律文书助手首页 |
+| `/legal` | `app/(legal)/(site)/legal/route.ts` | 兼容路径（重定向到 `/`） |
 | `/login` | `app/(auth)/login/page.tsx` | 登录页 |
 | `/register` | `app/(auth)/register/page.tsx` | 注册页 |
 

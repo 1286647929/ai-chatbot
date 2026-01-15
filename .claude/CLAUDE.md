@@ -1,7 +1,7 @@
 # Claude Code Global Configuration
 
-> Version: 2.0
-> Last Updated: 2025-11-15
+> Version: 3.0
+> Last Updated: 2026-01-07
 
 ---
 
@@ -10,11 +10,10 @@
 Follow this hierarchy (highest priority first). When conflicts arise, cite and enforce the higher rule:
 
 1. **Role + Safety**: Stay technical, enforce KISS/YAGNI principles, maintain backward compatibility, be honest about limitations
-2. **Workflow Contract**: Claude Code performs intake, context gathering, planning, and verification; execute all edits, commands, and tests via Codex CLI (`mcp__codex-cli__ask-codex`). Exception: very long documents can be modified directly. Switch to direct execution only after Codex CLI fails twice consecutively and log `CODEX_FALLBACK`.
-3. **Tooling & Safety Rules**: Use default Codex CLI payload `{ "model": "gpt-5.1-codex", "sandbox": true, "workingDir": "/absolute/path" }`; **always specify absolute `workingDir` path**; capture errors, retry once if transient, document fallbacks
-4. **Context Blocks & Persistence**: Honor `<context_gathering>`, `<persistence>`, `<tool_preambles>`, and `<self_reflection>` exactly as defined below
-5. **Quality Rubrics**: Follow code-editing rules, implementation checklist, and communication standards; keep outputs actionable
-6. **Reporting**: Provide file paths with line numbers, list risks and next steps when relevant
+2. **Workflow Contract**: Claude Code performs intake, context gathering, planning, execution, and verification directly using built-in tools
+3. **Context Blocks & Persistence**: Honor `<context_gathering>`, `<persistence>`, `<tool_preambles>`, and `<self_reflection>` exactly as defined below
+4. **Quality Rubrics**: Follow code-editing rules, implementation checklist, and communication standards; keep outputs actionable
+5. **Reporting**: Provide file paths with line numbers, list risks and next steps when relevant
 
 ---
 
@@ -28,22 +27,23 @@ Follow this hierarchy (highest priority first). When conflicts arise, cite and e
 
 ### 2. Context Gathering (analysis mode)
 - Run `<context_gathering>` once per task
-- Prefer targeted queries (`rg`, `fd`, Serena tools) over broad scans
+- Use ACE search_context for semantic code search, Glob/Grep for precise pattern matching
 - Budget: 5–8 tool calls for first sweep; justify overruns
 - Early stop: when you can name the exact edit or ≥70% signals converge
 
 ### 3. Planning (analysis mode)
 - Produce multi-step plan (≥2 steps)
 - Update progress after each step
-- Invoke `sequential-thinking` MCP when feasibility is uncertain
+- Use TodoWrite to track tasks and progress
 
 ### 4. Execution (execution mode)
-- Stop reasoning, call Codex CLI for every write/test
-- Tag each call with the plan step it executes
-- On failure: capture stderr/stdout, decide retry vs fallback, maintain alignment
+- Use Edit/Write tools for file modifications
+- Use Bash for commands and tests
+- Tag each action with the plan step it executes
+- On failure: capture stderr/stdout, decide retry vs alternative approach
 
 ### 5. Verification & Self-Reflection (analysis mode)
-- Run tests or inspections through Codex CLI
+- Run tests or inspections through Bash
 - Apply `<self_reflection>` before handing off
 - Redo work if any quality rubric fails
 
@@ -113,7 +113,7 @@ Evaluate the work before finalizing; **revisit the implementation if any categor
   ```java
   // Good
   log.info("Processing item: {}", itemCode);
-  
+
   // Bad
   log.info("Processing item: " + itemCode);
   ```
@@ -129,7 +129,7 @@ Evaluate the work before finalizing; **revisit the implementation if any categor
 - [ ] Intake reality check logged before touching tools (or justify higher-priority override)
 - [ ] First context-gathering batch within 5–8 tool calls (or documented exception)
 - [ ] Plan recorded with ≥2 steps and progress updates after each step
-- [ ] Execution performed via Codex CLI; fallback only after two consecutive failures, tagged `CODEX_FALLBACK`
+- [ ] Execution performed using Edit/Write/Bash tools directly
 - [ ] Verification includes tests/inspections plus `<self_reflection>`
 - [ ] Final handoff with file references (`file:line`), risks, and next steps
 - [ ] Instruction hierarchy conflicts resolved explicitly in the log
@@ -153,7 +153,7 @@ Evaluate the work before finalizing; **revisit the implementation if any categor
 | Complex planning, decomposition | `sequential-thinking` | Manual breakdown | Uncertain feasibility, multi-step refactor |
 | Official docs/API/framework | `context7` | `fetch` (raw URL) | Library usage, version differences, config issues |
 | Web content fetching | `fetch` | Manual search | Fetch web pages, documentation, blog posts |
-| Code semantic search, editing | `serena` | Direct file tools | Symbol location, cross-file refactor, references |
+| Code semantic search | `ace-tool` | Grep/Glob | Symbol location, cross-file analysis, codebase understanding |
 | Persistent memory, knowledge graph | `memory` | Manual notes | User preferences, project context, entity relationships |
 
 ### Sequential Thinking MCP
@@ -176,13 +176,6 @@ Evaluate the work before finalizing; **revisit the implementation if any categor
 - **Output**: Concise answer + doc section link/source; label library ID/version
 - **Fallback**: On failure, request clarification or provide conservative local answer with uncertainty label
 
-### Serena MCP
-- **Purpose**: LSP-based symbol-level search and code editing for large codebases
-- **Trigger**: Symbol/semantic search, cross-file reference analysis, refactoring, insertion/replacement
-- **Process**: Project activation → precise search → context validation → execute insertion/replacement → summary with reasons
-- **Common Tools**: `find_symbol`, `find_referencing_symbols`, `get_symbols_overview`, `insert_before_symbol`, `insert_after_symbol`, `replace_symbol_body`
-- **Strategy**: Prioritize small-scale, precise operations; single tool per round; include symbol/file location and change reason for traceability
-
 ### Memory MCP
 - **Purpose**: Persistent knowledge graph for user preferences, project context, and entity relationships across sessions
 - **Trigger**: User shares personal info, preferences, conventions; need to recall stored information
@@ -194,6 +187,40 @@ Evaluate the work before finalizing; **revisit the implementation if any categor
 - **Rate Limit**: On 429/throttle, back off 20s, reduce scope, switch to alternative service if needed
 - **Privacy**: Do not upload sensitive info; comply with robots.txt and ToS
 - **Read-Only Network**: External calls must be read-only; no mutations
+
+---
+
+## ACE Tool Usage
+
+### search_context (Semantic Code Search)
+
+**Purpose**: Augment's context engine for semantic search across the codebase
+
+**When to Use**:
+- When you don't know which files contain the information you need
+- When you want to gather high-level information about a task
+- When you want to understand the codebase structure
+
+**Good Query Examples**:
+- "Where is the function that handles user authentication?"
+- "What tests are there for the login functionality?"
+- "How is the database connected to the application?"
+
+**Bad Query Examples** (use Grep or Read instead):
+- "Find definition of constructor of class Foo" (use Grep)
+- "Find all references to function bar" (use Grep)
+- "Show me how Checkout class is used in services/payment.py" (use Read)
+
+**Strategy**:
+- Use as the primary tool for code search
+- Provide clear natural language description + optional keywords
+- Example format: "I want to find where the server handles chunk merging. Keywords: upload chunk merge, file service"
+
+### enhance_prompt (Prompt Enhancement)
+
+**Trigger**: Only use when user message contains `-enhance`, `-enhancer`, `-Enhance`, `-Enhancer` markers
+
+**Purpose**: Combines codebase context and conversation history to generate clearer, more specific prompts
 
 ---
 

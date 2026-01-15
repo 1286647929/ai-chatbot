@@ -84,7 +84,7 @@ export const chatModels: ChatModel[] = [
 ## 添加新的 AI 工具
 
 1. 在 `lib/ai/tools/` 创建新文件
-2. 在 `app/(chat)/api/chat/route.ts` 注册工具：
+2. 在实际调用 AI SDK 的 API 路由中注册工具（本仓库已移除 `app/(chat)` 路由组）：
 
 ```typescript
 tools: {

@@ -46,7 +46,7 @@ pnpm format           # Auto-fix formatting and lint issues
 # Testing (Playwright)
 pnpm test             # Run all Playwright tests (sets PLAYWRIGHT=True)
 # Run specific test file:
-pnpm exec playwright test tests/e2e/chat.test.ts
+pnpm exec playwright test tests/e2e/legal-default.test.ts
 # Run specific project:
 pnpm exec playwright test --project=e2e
 pnpm exec playwright test --project=routes
@@ -55,8 +55,8 @@ pnpm exec playwright test --project=routes
 ## Architecture
 
 ### Route Groups (Next.js App Router)
-- `app/(chat)/` - Main chat interface and API routes
-- `app/(auth)/` - Authentication pages and API (Auth.js/NextAuth)
+- `app/(auth)/` - Authentication UI (`/login`, `/register`) and Auth.js routes (`/api/auth/*`)
+- `app/(legal)/` - Legal assistant UI (served at `/`) and related legal API routes
 
 ### Key Directories
 - `lib/ai/` - AI provider configuration, model definitions, prompts, and tools

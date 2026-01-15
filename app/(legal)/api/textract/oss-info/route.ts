@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 
-import { auth } from "@/app/(auth)/auth";
-
 // 获取后端 API URL
 function getBackendUrl(): string {
   const baseUrl = process.env.TEXTRACT_API_BASE_URL;
@@ -34,12 +32,6 @@ export interface OssInfo {
 }
 
 export async function GET(request: Request) {
-  // 验证认证
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   try {
     const { searchParams } = new URL(request.url);
     const ossIds = searchParams.get("ossIds");
@@ -75,6 +67,14 @@ export async function GET(request: Request) {
 
     return NextResponse.json(result.data || []);
   } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "digest" in error &&
+      (error as { digest?: unknown }).digest === "NEXT_PRERENDER_INTERRUPTED"
+    ) {
+      throw error;
+    }
     console.error("OSS info API error:", error);
     return NextResponse.json(
       { error: "Failed to get OSS info" },

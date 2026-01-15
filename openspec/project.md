@@ -48,8 +48,8 @@ pnpm format  # 自动修复
 ### Architecture Patterns
 
 **Route Groups (Next.js App Router)**:
-- `app/(chat)/` - 主聊天界面和 API 路由
-- `app/(auth)/` - 认证页面和 API (Auth.js/NextAuth)
+- `app/(auth)/` - 认证 UI（`/login`、`/register`）与 Auth.js API（`/api/auth/*`）
+- `app/(legal)/` - Legal UI（`/`）与法律相关 API（`/api/legal/*`、`/api/textract*`），并提供 `/legal` → `/` 重定向
 
 **Key Directories**:
 - `lib/ai/` - AI 配置、模型定义、prompts、tools
@@ -74,7 +74,7 @@ pnpm format  # 自动修复
 
 ```bash
 pnpm test                                    # 运行所有测试
-pnpm exec playwright test tests/e2e/chat.test.ts  # 运行特定文件
+pnpm exec playwright test tests/e2e/legal-default.test.ts  # 运行特定文件
 pnpm exec playwright test --project=e2e      # 运行特定项目
 ```
 
@@ -111,14 +111,12 @@ pnpm exec playwright test --project=e2e      # 运行特定项目
 
 | 路由 | 方法 | 功能 |
 |------|------|------|
-| `/api/chat` | POST | 发送消息，返回流式响应 |
-| `/api/chat` | DELETE | 删除对话 |
-| `/api/chat/[id]/stream` | GET | 恢复中断的流 |
-| `/api/document` | GET/POST | 文档 CRUD |
-| `/api/files/upload` | POST | 文件上传 (Vercel Blob) |
-| `/api/history` | GET | 获取历史对话列表 |
-| `/api/suggestions` | GET/POST | 获取/创建文档建议 |
-| `/api/vote` | GET/PATCH | 消息投票 |
+| `/api/auth/[...nextauth]` | GET/POST | Auth.js (NextAuth) handler |
+| `/api/auth/guest` | GET | 游客登录 |
+| `/api/legal/interact` | POST | 法律对话代理 API |
+| `/api/textract` | POST | 文本提取 API |
+| `/api/textract/oss-info` | GET | OSS URL 查询 |
+| `/ping` | GET | 健康检查 |
 
 ## Important Constraints
 

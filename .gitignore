@@ -47,3 +47,4 @@ yarn-error.log*
 /temptsconfig.tsbuildinfo
 
 /temp
+.ace-tool/

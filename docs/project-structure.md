@@ -5,30 +5,27 @@ ai-chatbot/
 ├── app/                          # Next.js App Router
 │   ├── layout.tsx                # 根布局
 │   ├── globals.css               # 全局样式 (Tailwind)
-│   ├── (auth)/                   # 认证路由组
+│   ├── (auth)/                   # 认证路由组（对外 URL 不含该段）
 │   │   ├── auth.ts               # Auth.js 配置
 │   │   ├── auth.config.ts        # 认证配置
 │   │   ├── actions.ts            # 认证 Server Actions
 │   │   ├── login/page.tsx        # 登录页
 │   │   ├── register/page.tsx     # 注册页
-│   │   └── api/auth/
-│   │       ├── guest/route.ts    # 游客登录 API
-│   │       └── [...nextauth]/route.ts  # NextAuth 路由
-│   └── (chat)/                   # 聊天路由组
-│       ├── layout.tsx            # 聊天布局 (含侧边栏)
-│       ├── page.tsx              # 首页 (新对话)
-│       ├── actions.ts            # 聊天 Server Actions
-│       ├── chat/[id]/page.tsx    # 对话详情页
+│   │   └── api/
+│   │       └── auth/
+│   │           ├── guest/route.ts         # 游客登录 API
+│   │           └── [...nextauth]/route.ts # NextAuth 路由
+│   └── (legal)/                  # 法律助手路由组（对外 URL 不含该段）
+│       ├── (site)/               # Legal 主体验（含侧边栏布局）
+│       │   ├── layout.tsx        # Legal 布局 (含侧边栏)
+│       │   ├── page.tsx          # `/` 法律文书助手首页
+│       │   └── legal/route.ts    # `/legal` -> `/` 重定向
+│       ├── ping/route.ts         # `/ping` (测试用)
 │       └── api/
-│           ├── chat/
-│           │   ├── route.ts      # 聊天主 API (POST/DELETE)
-│           │   ├── schema.ts     # 请求体 Zod 校验
-│           │   └── [id]/stream/route.ts  # 流恢复 API
-│           ├── document/route.ts # 文档 CRUD API
-│           ├── files/upload/route.ts  # 文件上传 API
-│           ├── history/route.ts  # 历史记录 API
-│           ├── suggestions/route.ts   # 建议 API
-│           └── vote/route.ts     # 投票 API
+│           ├── legal/interact/route.ts   # 法律对话代理 API
+│           └── textract/
+│               ├── route.ts              # 文本提取 API
+│               └── oss-info/route.ts     # OSS URL 查询
 │
 ├── components/                   # React 组件
 │   ├── chat.tsx                  # 聊天主组件
@@ -95,7 +92,6 @@ ai-chatbot/
 │   └── usage.ts                  # Token 使用量类型
 │
 └── tests/                        # Playwright 测试
-    ├── e2e/                      # 端到端测试
-    ├── routes/                   # API 路由测试
-    └── fixtures.ts               # 测试 fixtures
+    ├── e2e/legal-default.test.ts # `/` 与 `/legal` 行为验证
+    └── routes/ping.test.ts       # `/ping` 健康检查
 ```

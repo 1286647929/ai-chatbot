@@ -27,7 +27,7 @@ export function LegalSidebar({ user }: { user: User | undefined }) {
           <div className="flex flex-row items-center justify-between">
             <Link
               className="flex flex-row items-center gap-3"
-              href="/legal"
+              href="/"
               onClick={() => {
                 setOpenMobile(false);
               }}

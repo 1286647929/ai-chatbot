@@ -195,16 +195,6 @@ ${Object.entries(AGENT_INFO)
         };
       }
 
-      // 不允许传递给 Router
-      if (targetAgent === AgentType.ROUTER) {
-        return {
-          success: false,
-          targetAgent,
-          message: "不能将任务传递给路由 Agent",
-          requestId: generateRequestId(),
-        };
-      }
-
       const agentInfo = AGENT_INFO[targetAgent];
       const requestId = generateRequestId();
 

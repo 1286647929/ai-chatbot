@@ -11,3 +11,4 @@ export const authConfig = {
   ],
   callbacks: {},
 } satisfies NextAuthConfig;
+
