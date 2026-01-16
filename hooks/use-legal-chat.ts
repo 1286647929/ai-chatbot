@@ -2,7 +2,6 @@
 
 import { useCallback, useRef, useState } from "react";
 
-import { legalInteract } from "@/lib/api";
 import { readSSEStreamWithAbort } from "@/lib/legal/stream-parser";
 import type {
   DocumentPath,
@@ -230,6 +229,34 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
   const [streamingEnabled, setStreamingEnabled] = useState(enableStreaming);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  const postInteract = useCallback(
+    async (body: LegalInteractRequest, signal: AbortSignal) => {
+      return fetch("/api/legal/interact", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal,
+      });
+    },
+    []
+  );
+
+  const postCancel = useCallback(async (sessionId: string) => {
+    try {
+      await fetch("/api/legal/cancel", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+    } catch {
+      // best-effort
+    }
+  }, []);
+
   // 添加用户消息
   const addUserMessage = useCallback(
     (content: string, attachments?: LegalAttachment[]) => {
@@ -335,12 +362,15 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
         abortControllerRef.current.abort();
       }
 
-      abortControllerRef.current = new AbortController();
-      const signal = abortControllerRef.current.signal;
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      const signal = controller.signal;
 
       // 添加用户消息
-      if (message.trim()) {
-        addUserMessage(message, attachments);
+      const trimmedMessage = message.trim();
+      const hasAttachments = Boolean(attachments && attachments.length > 0);
+      if (trimmedMessage || hasAttachments) {
+        addUserMessage(trimmedMessage || "【附件】", attachments);
       }
 
       setState((prev) => ({
@@ -352,22 +382,18 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
       try {
         const requestBody: LegalInteractRequest = {
           session_id: state.sessionId || undefined,
-          message: message || undefined,
-          stream: streamingEnabled,
-          attachments: attachments?.map((a) => ({
-            attachment_id: a.attachment_id,
-            text_content: a.text_content,
+          message: trimmedMessage || undefined,
+          action: "continue",
+          media_attachments: attachments?.map((a) => ({
+            oss_id: a.oss_id,
+            file_name: a.file_name,
+            file_size: a.file_size,
+            content_type: a.content_type,
           })),
+          stream: streamingEnabled,
         };
 
-        const response = await fetch("/api/legal/interact", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(requestBody),
-          signal,
-        });
+        const response = await postInteract(requestBody, signal);
 
         if (!response.ok) {
           const errorData = await response.json();
@@ -384,9 +410,15 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
             isStreaming: true,
           }));
 
+          // 先创建占位消息，避免 fallback/异常时无消息可更新
+          addAssistantMessage("", state.currentStep, undefined, true);
+
           let streamingContent = "";
           let finalStep: LegalStep | undefined;
           let finalData: LegalResponseData | undefined;
+          let doneReceived = false;
+          let fallbackRequested = false;
+          let fallbackMessage: string | undefined;
 
           await readSSEStreamWithAbort(
             response,
@@ -397,8 +429,9 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
                     ...prev,
                     sessionId: event.session_id || prev.sessionId,
                   }));
-                  // 创建空的助手消息
-                  addAssistantMessage("", event.next_step, undefined, true);
+                  if (event.next_step) {
+                    updateLastAssistantMessage({ step: event.next_step });
+                  }
                   break;
 
                 case "content":
@@ -409,6 +442,7 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
                   break;
 
                 case "done":
+                  doneReceived = true;
                   finalStep = event.next_step;
                   finalData = event.data;
 
@@ -444,13 +478,82 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
                     isStreaming: false,
                     error: event.message || "Stream error",
                   }));
+                  updateLastAssistantMessage({ is_streaming: false });
+                  break;
+
+                case "fallback":
+                  fallbackRequested = true;
+                  fallbackMessage = event.message || "此阶段使用非流式响应";
+                  setState((prev) => ({
+                    ...prev,
+                    isStreaming: false,
+                    isLoading: true,
+                  }));
+                  updateLastAssistantMessage({
+                    content: fallbackMessage,
+                    is_streaming: false,
+                  });
+                  controller.abort();
                   break;
               }
             },
             signal
           );
 
-          // 返回最终结果
+          if (signal.aborted && !fallbackRequested) {
+            return;
+          }
+
+          // fallback：自动无感切换到 non-stream
+          if (fallbackRequested) {
+            const retryController = new AbortController();
+            abortControllerRef.current = retryController;
+
+            const retryBody: LegalInteractRequest = {
+              ...requestBody,
+              stream: false,
+            };
+
+            const retryResponse = await postInteract(retryBody, retryController.signal);
+            if (!retryResponse.ok) {
+              const errorData = await retryResponse.json().catch(() => ({}));
+              throw new Error((errorData as any).error || "Request failed");
+            }
+            const data: LegalApiResponse = await retryResponse.json();
+
+            const { session_id, next_step, data: respData } = data;
+            const content = extractMessageContent(next_step, respData);
+
+            setState((prev) => {
+              const stepUpdates = processStepData(next_step, respData, prev);
+              return {
+                ...prev,
+                sessionId: session_id || prev.sessionId,
+                isLoading: false,
+                isStreaming: false,
+                ...stepUpdates,
+              };
+            });
+
+            updateLastAssistantMessage({
+              content,
+              step: next_step,
+              data: respData,
+              is_streaming: false,
+            });
+
+            return { next_step, data: respData };
+          }
+
+          if (!doneReceived) {
+            setState((prev) => ({
+              ...prev,
+              isStreaming: false,
+              error: prev.error || "Stream ended unexpectedly",
+            }));
+            updateLastAssistantMessage({ is_streaming: false });
+          }
+
           return { next_step: finalStep, data: finalData };
         }
 
@@ -472,11 +575,13 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
     },
     [
       state.sessionId,
+      state.currentStep,
       streamingEnabled,
       addUserMessage,
       addAssistantMessage,
       updateLastAssistantMessage,
       handleResponse,
+      postInteract,
     ]
   );
 
@@ -496,30 +601,70 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
       // 添加用户选择消息
       addUserMessage(pathName);
 
-      // 通过 message 字段发送路径名称（后端通过名称识别选择）
-      const result = await legalInteract({
-        session_id: state.sessionId || undefined,
-        message: pathName,
-        stream: false,
-      }, { showErrorToast: false });
+      try {
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
 
-      if (result.success && result.data) {
-        return handleResponse(result.data);
+        const response = await postInteract(
+          {
+            session_id: state.sessionId || undefined,
+            message: pathName,
+            action: "continue",
+            stream: false,
+          },
+          controller.signal
+        );
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error((errorData as any).error || "Request failed");
+        }
+        const data: LegalApiResponse = await response.json();
+        return handleResponse(data);
+      } catch (error) {
+        setState((prev) => ({
+          ...prev,
+          isLoading: false,
+          error: error instanceof Error ? error.message : "Request failed",
+        }));
       }
-
-      setState((prev) => ({
-        ...prev,
-        isLoading: false,
-        error: result.message || "Request failed",
-      }));
     },
-    [state.sessionId, handleResponse, addUserMessage]
+    [state.sessionId, handleResponse, addUserMessage, postInteract]
   );
 
   // 自动继续（用于 path_selected 等需要自动触发下一步的场景）
   const autoContinue = useCallback(async () => {
-    return sendMessage("");
-  }, [sendMessage]);
+    setState((prev) => ({
+      ...prev,
+      isLoading: true,
+      error: null,
+    }));
+
+    try {
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      const response = await postInteract(
+        {
+          session_id: state.sessionId || undefined,
+          action: "continue",
+          stream: false,
+        },
+        controller.signal
+      );
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error((errorData as any).error || "Request failed");
+      }
+      const data: LegalApiResponse = await response.json();
+      return handleResponse(data);
+    } catch (error) {
+      setState((prev) => ({
+        ...prev,
+        isLoading: false,
+        error: error instanceof Error ? error.message : "Request failed",
+      }));
+    }
+  }, [state.sessionId, handleResponse, postInteract]);
 
   // 跳过劳动合同检查
   const skipContractCheck = useCallback(async () => {
@@ -529,22 +674,34 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
       error: null,
     }));
 
-    const result = await legalInteract({
-      session_id: state.sessionId || undefined,
-      message: "skip",
-      stream: false,
-    }, { showErrorToast: false });
+    addUserMessage("【跳过】");
 
-    if (result.success && result.data) {
-      return handleResponse(result.data);
+    try {
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      const response = await postInteract(
+        {
+          session_id: state.sessionId || undefined,
+          action: "skip",
+          stream: false,
+        },
+        controller.signal
+      );
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error((errorData as any).error || "Request failed");
+      }
+      const data: LegalApiResponse = await response.json();
+      return handleResponse(data);
+    } catch (error) {
+      setState((prev) => ({
+        ...prev,
+        isLoading: false,
+        error: error instanceof Error ? error.message : "Request failed",
+      }));
     }
-
-    setState((prev) => ({
-      ...prev,
-      isLoading: false,
-      error: result.message || "Request failed",
-    }));
-  }, [state.sessionId, handleResponse]);
+  }, [state.sessionId, handleResponse, addUserMessage, postInteract]);
 
   // 提交补充信息
   const submitSupplementInfo = useCallback(
@@ -555,27 +712,41 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
         error: null,
       }));
 
-      const result = await legalInteract({
-        session_id: state.sessionId || undefined,
-        message: JSON.stringify(fieldValues),
-        stream: false,
-      }, { showErrorToast: false });
+      addUserMessage("【提交信息】");
 
-      if (result.success && result.data) {
-        return handleResponse(result.data);
+      try {
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+
+        const response = await postInteract(
+          {
+            session_id: state.sessionId || undefined,
+            action: "submit_answers",
+            data: fieldValues,
+            stream: false,
+          },
+          controller.signal
+        );
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error((errorData as any).error || "Request failed");
+        }
+        const data: LegalApiResponse = await response.json();
+        return handleResponse(data);
+      } catch (error) {
+        setState((prev) => ({
+          ...prev,
+          isLoading: false,
+          error: error instanceof Error ? error.message : "Request failed",
+        }));
       }
-
-      setState((prev) => ({
-        ...prev,
-        isLoading: false,
-        error: result.message || "Request failed",
-      }));
     },
-    [state.sessionId, handleResponse]
+    [state.sessionId, handleResponse, addUserMessage, postInteract]
   );
 
   // 停止流
   const stopStream = useCallback(() => {
+    const sessionId = state.sessionId;
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
@@ -589,7 +760,11 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
     updateLastAssistantMessage({
       is_streaming: false,
     });
-  }, [updateLastAssistantMessage]);
+
+    if (sessionId) {
+      postCancel(sessionId);
+    }
+  }, [state.sessionId, updateLastAssistantMessage, postCancel]);
 
   // 重置会话
   const reset = useCallback(() => {
@@ -609,21 +784,25 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
       error: null,
     }));
 
-    const result = await legalInteract({}, {
-      showErrorToast: false,
-      errorMessage: "初始化会话失败",
-    });
+    try {
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
 
-    if (result.success && result.data) {
-      handleResponse(result.data);
-    } else {
+      const response = await postInteract({ stream: false }, controller.signal);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error((errorData as any).error || "Failed to initialize session");
+      }
+      const data: LegalApiResponse = await response.json();
+      handleResponse(data);
+    } catch (error) {
       setState((prev) => ({
         ...prev,
         isLoading: false,
-        error: result.message || "Failed to initialize session",
+        error: error instanceof Error ? error.message : "Failed to initialize session",
       }));
     }
-  }, [handleResponse]);
+  }, [handleResponse, postInteract]);
 
   return {
     // 状态

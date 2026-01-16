@@ -146,7 +146,7 @@ export interface LegalApiResponse {
 }
 
 // SSE 流事件类型
-export type StreamEventType = "start" | "content" | "done" | "error";
+export type StreamEventType = "start" | "content" | "done" | "error" | "fallback";
 
 // SSE 流事件
 export interface StreamEvent {
@@ -158,16 +158,23 @@ export interface StreamEvent {
   message?: string;
 }
 
-// 附件信息
+// App 侧媒体附件（通过 ossId 引用；后端负责 textract 与落库）
+export interface LegalMediaAttachment {
+  oss_id: number;
+  file_name?: string;
+  file_size?: number;
+  content_type?: string;
+  media_duration?: number;
+}
+
+// UI 附件信息（用于预览/发送）
 export interface LegalAttachment {
-  attachment_id: string;
-  file_url?: string; // OSS URL（后端存储后获取）
+  oss_id: number;
+  file_url?: string; // 上传后返回的 URL
   local_url?: string; // 本地预览 URL（Object URL）
   file_name: string;
   content_type: string;
-  text_content?: string;
-  is_extracting?: boolean;
-  extraction_error?: string;
+  file_size?: number;
 }
 
 // 消息角色
@@ -190,11 +197,9 @@ export interface LegalInteractRequest {
   session_id?: string;
   message?: string;
   stream?: boolean;
-  selected_path?: string;
-  attachments?: Array<{
-    attachment_id: string;
-    text_content?: string;
-  }>;
+  action?: "continue" | "skip" | "generate_document" | "submit_answers" | string;
+  data?: Record<string, unknown>;
+  media_attachments?: LegalMediaAttachment[];
 }
 
 // OCR 提取请求

@@ -2,7 +2,7 @@
  * 法律咨询 API 模块
  */
 import { post } from "@/lib/request";
-import type { LegalApiResponse, LegalInteractRequest } from "@/lib/legal/types";
+import type { LegalApiResponse, LegalInteractRequest, LegalMediaAttachment } from "@/lib/legal/types";
 
 /**
  * 法律咨询交互 API
@@ -40,12 +40,13 @@ export async function initLegalSession() {
 export async function sendLegalMessage(
   sessionId: string,
   message: string,
-  attachments?: Array<{ attachment_id: string; text_content?: string }>
+  mediaAttachments?: LegalMediaAttachment[]
 ) {
   return legalInteract({
     session_id: sessionId,
     message,
-    attachments,
+    action: "continue",
+    media_attachments: mediaAttachments,
   });
 }
 
@@ -57,7 +58,8 @@ export async function sendLegalMessage(
 export async function selectLegalPath(sessionId: string, pathId: string) {
   return legalInteract({
     session_id: sessionId,
-    selected_path: pathId,
+    message: pathId,
+    action: "continue",
   });
 }
 
@@ -68,6 +70,6 @@ export async function selectLegalPath(sessionId: string, pathId: string) {
 export async function continueLegalSession(sessionId: string) {
   return legalInteract({
     session_id: sessionId,
-    message: "continue",
+    action: "continue",
   });
 }

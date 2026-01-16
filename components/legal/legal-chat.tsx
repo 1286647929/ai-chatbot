@@ -6,7 +6,7 @@ import { MicIcon, PaperclipIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { useLegalChat } from "@/hooks/use-legal-chat";
-import { extractText, getOssUrlsWithRetry, recognizeVoice } from "@/lib/api";
+import { recognizeVoice } from "@/lib/api";
 import type { LegalAttachment, LegalMessage, LegalStep } from "@/lib/legal/types";
 import { cn } from "@/lib/utils";
 import { AttachmentAnalysisCard } from "./attachment-analysis";
@@ -27,6 +27,44 @@ import {
 import { Button } from "../ui/button";
 import { ImagePreview } from "../ui/image-preview";
 import { Textarea } from "../ui/textarea";
+
+const LEGAL_UPLOAD_ALLOWED_EXTENSIONS = new Set([
+  "bmp",
+  "gif",
+  "jpg",
+  "jpeg",
+  "png",
+  "doc",
+  "docx",
+  "xls",
+  "xlsx",
+  "ppt",
+  "pptx",
+  "html",
+  "htm",
+  "txt",
+  "rar",
+  "zip",
+  "gz",
+  "bz2",
+  "mp3",
+  "mp4",
+  "avi",
+  "rmvb",
+  "pdf",
+]);
+
+function getFileExtension(name: string) {
+  return name.split(".").pop()?.toLowerCase() || "";
+}
+
+type UploadCredentialVo = {
+  ossId: number;
+  url: string;
+  fileName: string;
+  fileSize: number;
+  contentType: string;
+};
 
 // ============================================================
 // 法律聊天欢迎语
@@ -105,7 +143,7 @@ function LegalMessageItem({
                   return (
                     <ImagePreview
                       alt={attachment.file_name}
-                      key={attachment.attachment_id}
+                      key={attachment.oss_id}
                       src={imageUrl}
                     />
                   );
@@ -115,7 +153,7 @@ function LegalMessageItem({
                 return (
                   <div
                     className="rounded-lg border bg-muted/50 px-3 py-2 text-sm"
-                    key={attachment.attachment_id}
+                    key={attachment.oss_id}
                   >
                     {attachment.file_name}
                   </div>
@@ -387,7 +425,7 @@ export function LegalChat() {
     reset,
     initSession,
     setStreamingEnabled,
-  } = useLegalChat({ enableStreaming: false });
+  } = useLegalChat({ enableStreaming: true });
 
   const [inputValue, setInputValue] = useState("");
   const [attachments, setAttachments] = useState<LegalAttachment[]>([]);
@@ -448,7 +486,7 @@ export function LegalChat() {
   // 发送消息
   const handleSend = async () => {
     const trimmedValue = inputValue.trim();
-    if (!trimmedValue || isLoading || isStreaming) {
+    if ((!trimmedValue && attachments.length === 0) || isLoading || isStreaming) {
       return;
     }
 
@@ -457,84 +495,80 @@ export function LegalChat() {
       trimmedValue,
       attachments.length > 0 ? attachments : undefined
     );
+    for (const a of attachments) {
+      if (a.local_url) {
+        URL.revokeObjectURL(a.local_url);
+      }
+    }
     setAttachments([]);
   };
 
-  // 上传文件到 Textract 服务（同时进行 OCR 和 OSS 存储）
-  const uploadFilesToTextract = useCallback(async (
-    files: File[],
-    scene: string
-  ): Promise<LegalAttachment[]> => {
-    const result = await extractText(files, scene);
-
-    if (!result.success || !result.data?.results) {
-      return [];
+  // 上传文件到 Legal Upload（写入 OSS，返回 ossId/url）
+  const uploadFilesToLegalUpload = useCallback(async (files: File[]): Promise<LegalAttachment[]> => {
+    const formData = new FormData();
+    for (const file of files) {
+      formData.append("files", file, file.name);
     }
 
-    // 解析响应，创建附件列表
-    const attachmentList: LegalAttachment[] = [];
-    const ossIds: string[] = [];
+    const response = await fetch("/api/legal/upload", {
+      method: "POST",
+      body: formData,
+    });
 
-    for (const textractResult of result.data.results) {
-      // 找到对应的原始文件（用于创建本地预览 URL）
-      const originalFile = files.find((f) => f.name === textractResult.filename);
-      const localUrl = originalFile ? URL.createObjectURL(originalFile) : undefined;
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error((errorData as any).error || "上传失败");
+    }
 
-      const ossId = textractResult.ossId || textractResult.filename;
-      if (textractResult.ossId) {
-        ossIds.push(textractResult.ossId);
+    const uploaded: UploadCredentialVo[] = await response.json();
+    const byName = new Map(uploaded.map((u) => [u.fileName, u]));
+
+    const list: LegalAttachment[] = [];
+    for (const file of files) {
+      const u = byName.get(file.name);
+      if (!u?.ossId) {
+        continue;
       }
-
-      attachmentList.push({
-        attachment_id: ossId,
-        file_name: textractResult.filename,
-        content_type: originalFile?.type || "application/octet-stream",
-        local_url: localUrl,
-        text_content: textractResult.status === "success" ? textractResult.text : undefined,
-        is_extracting: false,
-        extraction_error: textractResult.status === "failed" ? (textractResult.error || "处理失败") : undefined,
+      list.push({
+        oss_id: u.ossId,
+        file_name: u.fileName || file.name,
+        content_type: u.contentType || file.type || "application/octet-stream",
+        file_size: u.fileSize ?? file.size,
+        local_url: URL.createObjectURL(file),
+        file_url: u.url,
       });
     }
-
-    // 异步获取 OSS URL（不阻塞返回）
-    if (ossIds.length > 0) {
-      getOssUrlsWithRetry(ossIds).then((urlMap) => {
-        if (urlMap.size > 0) {
-          setAttachments((prev) =>
-            prev.map((a) => {
-              const ossUrl = urlMap.get(a.attachment_id);
-              if (ossUrl) {
-                return { ...a, file_url: ossUrl };
-              }
-              return a;
-            })
-          );
-        }
-      });
-    }
-
-    return attachmentList;
+    return list;
   }, []);
 
   // 处理文件选择
   const handleFileChange = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(event.target.files || []);
-      if (files.length === 0) return;
+      const rawFiles = Array.from(event.target.files || []);
+      const files = rawFiles.filter((f) =>
+        LEGAL_UPLOAD_ALLOWED_EXTENSIONS.has(getFileExtension(f.name))
+      );
+      if (files.length === 0) {
+        toast.error("不支持的文件类型");
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+        return;
+      }
 
       setUploadQueue(files.map((f) => f.name));
 
       try {
-        // 根据文件类型确定 scene
-        const hasAudio = files.some((f) => f.type.startsWith("audio/"));
-        const scene = hasAudio ? "voice" : "legal";
+        if (files.length !== rawFiles.length) {
+          toast.error("存在不支持的文件类型，已自动忽略");
+        }
 
-        // 直接调用 textract API（后端会同时进行 OCR 和 OSS 存储）
-        const uploadedAttachments = await uploadFilesToTextract(files, scene);
-
+        const uploadedAttachments = await uploadFilesToLegalUpload(files);
         if (uploadedAttachments.length > 0) {
           setAttachments((prev) => [...prev, ...uploadedAttachments]);
         }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "上传失败");
       } finally {
         setUploadQueue([]);
         // 重置 input 以允许重复选择相同文件
@@ -543,18 +577,18 @@ export function LegalChat() {
         }
       }
     },
-    [uploadFilesToTextract]
+    [uploadFilesToLegalUpload]
   );
 
   // 移除附件
-  const removeAttachment = useCallback((attachmentId: string) => {
+  const removeAttachment = useCallback((ossId: number) => {
     setAttachments((prev) => {
-      const attachment = prev.find((a) => a.attachment_id === attachmentId);
+      const attachment = prev.find((a) => a.oss_id === ossId);
       // 释放本地 Object URL
       if (attachment?.local_url) {
         URL.revokeObjectURL(attachment.local_url);
       }
-      return prev.filter((a) => a.attachment_id !== attachmentId);
+      return prev.filter((a) => a.oss_id !== ossId);
     });
   }, []);
 
@@ -563,7 +597,12 @@ export function LegalChat() {
     async (blob: Blob, _duration: number) => {
       const result = await recognizeVoice(blob);
 
-      if (!result.success || !result.data?.results?.length) {
+      if (!result.success) {
+        toast.error(result.message || "语音识别失败");
+        return;
+      }
+
+      if (!result.data?.results?.length) {
         toast.error("语音识别失败");
         return;
       }
@@ -681,7 +720,7 @@ export function LegalChat() {
           <div className="mx-auto max-w-3xl">
             {/* 隐藏的文件输入 */}
             <input
-              accept="image/*,application/pdf,.doc,.docx,audio/*"
+              accept=".bmp,.gif,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.html,.htm,.txt,.rar,.zip,.gz,.bz2,.mp3,.mp4,.avi,.rmvb,.pdf"
               className="hidden"
               multiple
               onChange={handleFileChange}
@@ -693,16 +732,14 @@ export function LegalChat() {
             {(attachments.length > 0 || uploadQueue.length > 0) && (
               <div className="mb-3 flex flex-wrap gap-2">
                 {attachments.map((attachment) => (
-                  <div className="group relative" key={attachment.attachment_id}>
+                  <div className="group relative" key={attachment.oss_id}>
                     <PreviewAttachment
                       attachment={{
                         url: attachment.local_url || attachment.file_url || "",
                         name: attachment.file_name,
                         contentType: attachment.content_type,
                       }}
-                      isExtracting={attachment.is_extracting}
-                      extractionError={attachment.extraction_error}
-                      onRemove={() => removeAttachment(attachment.attachment_id)}
+                      onRemove={() => removeAttachment(attachment.oss_id)}
                     />
                   </div>
                 ))}
@@ -782,7 +819,7 @@ export function LegalChat() {
                   ) : (
                     <Button
                       className="size-8"
-                      disabled={!inputValue.trim() || isLoading}
+                      disabled={(!inputValue.trim() && attachments.length === 0) || isLoading}
                       onClick={handleSend}
                       size="icon"
                     >

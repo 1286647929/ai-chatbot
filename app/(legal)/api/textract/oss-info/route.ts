@@ -2,23 +2,27 @@ import { NextResponse } from "next/server";
 
 // 获取后端 API URL
 function getBackendUrl(): string {
-  const baseUrl = process.env.TEXTRACT_API_BASE_URL;
+  const baseUrl = process.env.BASE_URL;
   if (!baseUrl) {
-    throw new Error("TEXTRACT_API_BASE_URL is not configured");
+    throw new Error("BASE_URL is not configured");
   }
   return `${baseUrl}/app/legal/textract/oss-info`;
 }
 
 // 构建请求头
 function buildHeaders(): HeadersInit {
-  const headers: HeadersInit = {};
-
-  const apiKey = process.env.TEXTRACT_API_KEY;
-  if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`;
+  const token = process.env.BEARER_TOKEN;
+  const clientId = process.env.CLIENTID;
+  if (!token) {
+    throw new Error("BEARER_TOKEN is not configured");
   }
-
-  return headers;
+  if (!clientId) {
+    throw new Error("CLIENTID is not configured");
+  }
+  return {
+    Authorization: `Bearer ${token}`,
+    clientid: clientId,
+  };
 }
 
 // OSS 文件信息类型
@@ -39,7 +43,7 @@ export async function GET(request: Request) {
     if (!ossIds) {
       return NextResponse.json(
         { error: "ossIds parameter is required" },
-        { status: 400 }
+        { status: 400, headers: { "Cache-Control": "no-store" } }
       );
     }
 
@@ -47,6 +51,8 @@ export async function GET(request: Request) {
     const response = await fetch(backendUrl, {
       method: "GET",
       headers: buildHeaders(),
+      signal: request.signal,
+      cache: "no-store",
     });
 
     if (!response.ok) {
@@ -54,7 +60,7 @@ export async function GET(request: Request) {
       console.error("OSS info backend error:", errorText);
       return NextResponse.json(
         { error: "Failed to get OSS info" },
-        { status: response.status }
+        { status: response.status, headers: { "Cache-Control": "no-store" } }
       );
     }
 
@@ -62,10 +68,14 @@ export async function GET(request: Request) {
 
     // 后端返回格式: { code: 200, data: [...], msg: "..." }
     if (result.code === 200 && result.data) {
-      return NextResponse.json(result.data);
+      return NextResponse.json(result.data, {
+        headers: { "Cache-Control": "no-store" },
+      });
     }
 
-    return NextResponse.json(result.data || []);
+    return NextResponse.json(result.data || [], {
+      headers: { "Cache-Control": "no-store" },
+    });
   } catch (error) {
     if (
       typeof error === "object" &&
@@ -78,7 +88,7 @@ export async function GET(request: Request) {
     console.error("OSS info API error:", error);
     return NextResponse.json(
       { error: "Failed to get OSS info" },
-      { status: 500 }
+      { status: 500, headers: { "Cache-Control": "no-store" } }
     );
   }
 }

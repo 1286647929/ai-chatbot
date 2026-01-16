@@ -2,28 +2,29 @@ import { NextResponse } from "next/server";
 
 import type { TextractMultipleResponse } from "@/lib/legal/types";
 
-// 最大文件大小 10MB
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
-
 // 获取后端 API URL
 function getBackendUrl(): string {
-  const baseUrl = process.env.TEXTRACT_API_BASE_URL;
+  const baseUrl = process.env.BASE_URL;
   if (!baseUrl) {
-    throw new Error("TEXTRACT_API_BASE_URL is not configured");
+    throw new Error("BASE_URL is not configured");
   }
   return `${baseUrl}/app/legal/textract/multiple`;
 }
 
 // 构建请求头
 function buildHeaders(): HeadersInit {
-  const headers: HeadersInit = {};
-
-  const apiKey = process.env.TEXTRACT_API_KEY;
-  if (apiKey) {
-    headers.Authorization = `Bearer ${apiKey}`;
+  const token = process.env.BEARER_TOKEN;
+  const clientId = process.env.CLIENTID;
+  if (!token) {
+    throw new Error("BEARER_TOKEN is not configured");
   }
-
-  return headers;
+  if (!clientId) {
+    throw new Error("CLIENTID is not configured");
+  }
+  return {
+    Authorization: `Bearer ${token}`,
+    clientid: clientId,
+  };
 }
 
 export async function POST(request: Request) {
@@ -43,16 +44,6 @@ export async function POST(request: Request) {
         );
       }
 
-      // 验证文件大小
-      for (const file of files) {
-        if (file.size > MAX_FILE_SIZE) {
-          return NextResponse.json(
-            { error: `File ${file.name} exceeds 10MB limit` },
-            { status: 400 }
-          );
-        }
-      }
-
       // 构建发送到后端的 FormData
       const backendFormData = new FormData();
       for (const file of files) {
@@ -67,6 +58,7 @@ export async function POST(request: Request) {
         method: "POST",
         headers: buildHeaders(),
         body: backendFormData,
+        signal: request.signal,
       });
 
       if (!response.ok) {
