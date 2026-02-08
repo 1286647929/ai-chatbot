@@ -2,9 +2,9 @@
 
 import { memo } from "react";
 import { useWindowSize } from "usehooks-ts";
-import { Button } from "@/components/ui/button";
 import { PlusIcon } from "@/components/icons";
 import { SidebarToggle } from "@/components/sidebar-toggle";
+import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/components/ui/sidebar";
 
 function PureLegalChatHeader() {

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { CheckIcon } from "lucide-react";
+import { useState } from "react";
 
 import type { DocumentPath } from "@/lib/legal/types";
 import { cn } from "@/lib/utils";

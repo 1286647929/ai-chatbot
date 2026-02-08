@@ -90,7 +90,10 @@ export async function POST(request: Request) {
 
     // 不支持的内容类型
     return NextResponse.json(
-      { error: "Unsupported content type. Use multipart/form-data for file upload." },
+      {
+        error:
+          "Unsupported content type. Use multipart/form-data for file upload.",
+      },
       { status: 400 }
     );
   } catch (error) {

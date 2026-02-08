@@ -146,7 +146,12 @@ export interface LegalApiResponse {
 }
 
 // SSE 流事件类型
-export type StreamEventType = "start" | "content" | "done" | "error" | "fallback";
+export type StreamEventType =
+  | "start"
+  | "content"
+  | "done"
+  | "error"
+  | "fallback";
 
 // SSE 流事件
 export interface StreamEvent {
@@ -197,7 +202,12 @@ export interface LegalInteractRequest {
   session_id?: string;
   message?: string;
   stream?: boolean;
-  action?: "continue" | "skip" | "generate_document" | "submit_answers" | string;
+  action?:
+    | "continue"
+    | "skip"
+    | "generate_document"
+    | "submit_answers"
+    | string;
   data?: Record<string, unknown>;
   media_attachments?: LegalMediaAttachment[];
 }

@@ -28,7 +28,10 @@ export async function POST(request: Request) {
     const contentType = request.headers.get("content-type") || "";
     if (!contentType.includes("multipart/form-data")) {
       return NextResponse.json(
-        { error: "Unsupported content type. Use multipart/form-data for file upload." },
+        {
+          error:
+            "Unsupported content type. Use multipart/form-data for file upload.",
+        },
         { status: 400 }
       );
     }
@@ -68,7 +71,10 @@ export async function POST(request: Request) {
       return NextResponse.json(result.data);
     }
 
-    return NextResponse.json({ error: result?.msg || "Upload failed" }, { status: 400 });
+    return NextResponse.json(
+      { error: result?.msg || "Upload failed" },
+      { status: 400 }
+    );
   } catch (error) {
     console.error("Legal upload API error:", error);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });

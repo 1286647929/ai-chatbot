@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 interface VoiceWaveformProps {
@@ -14,12 +14,12 @@ interface VoiceWaveformProps {
  * 模拟 ChatGPT 风格的音频波形效果
  */
 export function VoiceWaveform({ isRecording, className }: VoiceWaveformProps) {
-  const [bars, setBars] = useState<number[]>(Array(24).fill(2));
+  const [bars, setBars] = useState<number[]>(new Array(24).fill(2));
 
   useEffect(() => {
     if (!isRecording) {
       // 停止录制时重置为最小高度
-      setBars(Array(24).fill(2));
+      setBars(new Array(24).fill(2));
       return;
     }
 
@@ -29,8 +29,12 @@ export function VoiceWaveform({ isRecording, className }: VoiceWaveformProps) {
         prev.map(() => {
           // 生成随机高度，模拟音频波形
           const random = Math.random();
-          if (random < 0.3) return 2; // 30% 概率最小
-          if (random < 0.6) return Math.random() * 8 + 4; // 30% 概率中等
+          if (random < 0.3) {
+            return 2; // 30% 概率最小
+          }
+          if (random < 0.6) {
+            return Math.random() * 8 + 4; // 30% 概率中等
+          }
           return Math.random() * 16 + 8; // 40% 概率较高
         })
       );

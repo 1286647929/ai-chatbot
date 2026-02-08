@@ -40,7 +40,9 @@ export function QuestionCard({ question }: QuestionCardProps) {
         {/* 事实分析（如果有） */}
         {question.fact_analysis && (
           <div className="rounded-lg bg-muted/50 p-3 text-muted-foreground text-sm">
-            <div className="mb-1 font-medium text-foreground/80">背景分析：</div>
+            <div className="mb-1 font-medium text-foreground/80">
+              背景分析：
+            </div>
             {question.fact_analysis}
           </div>
         )}

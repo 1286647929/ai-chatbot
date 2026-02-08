@@ -1,9 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { User } from "next-auth";
 import { PlusIcon } from "@/components/icons";
-import { SidebarUserNav } from "@/components/sidebar-user-nav";
 import { Button } from "@/components/ui/button";
 import {
   Sidebar,
@@ -15,9 +13,13 @@ import {
   SidebarMenu,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
-export function LegalSidebar({ user }: { user: User | undefined }) {
+export function LegalSidebar() {
   const { setOpenMobile } = useSidebar();
 
   return (
@@ -44,7 +46,9 @@ export function LegalSidebar({ user }: { user: User | undefined }) {
                     onClick={() => {
                       setOpenMobile(false);
                       // 触发自定义事件，通知 LegalChat 重置会话
-                      window.dispatchEvent(new CustomEvent("legal-new-session"));
+                      window.dispatchEvent(
+                        new CustomEvent("legal-new-session")
+                      );
                     }}
                     type="button"
                     variant="ghost"
@@ -69,7 +73,7 @@ export function LegalSidebar({ user }: { user: User | undefined }) {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>{user && <SidebarUserNav user={user} />}</SidebarFooter>
+      <SidebarFooter />
     </Sidebar>
   );
 }

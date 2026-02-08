@@ -207,8 +207,8 @@ export function QuestionCard({
           <div className="text-sm">{factAnalysis.summary}</div>
           {factAnalysis.extracted_facts.length > 0 && (
             <ul className="list-inside list-disc text-muted-foreground text-xs">
-              {factAnalysis.extracted_facts.map((fact, idx) => (
-                <li key={idx}>{fact}</li>
+              {factAnalysis.extracted_facts.map((fact) => (
+                <li key={fact}>{fact}</li>
               ))}
             </ul>
           )}

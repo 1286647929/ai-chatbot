@@ -35,8 +35,8 @@ const DEFAULT_CONFIG: LRUCacheConfig = {
  * 线程安全的 LRU 缓存实现
  */
 export class LRUCache<T> {
-  private cache: Map<string, CacheEntry<T>> = new Map();
-  private config: LRUCacheConfig;
+  private readonly cache: Map<string, CacheEntry<T>> = new Map();
+  private readonly config: LRUCacheConfig;
   private hits = 0;
   private misses = 0;
 
@@ -96,7 +96,9 @@ export class LRUCache<T> {
    */
   has(key: string): boolean {
     const entry = this.cache.get(key);
-    if (!entry) return false;
+    if (!entry) {
+      return false;
+    }
 
     if (Date.now() > entry.expiresAt) {
       this.cache.delete(key);
@@ -213,10 +215,13 @@ export const searchCache = new LRUCache<unknown>({
 
 // 定期清理过期条目（每 5 分钟）
 if (typeof setInterval !== "undefined") {
-  setInterval(() => {
-    const cleaned = searchCache.cleanup();
-    if (cleaned > 0) {
-      console.log(`[Cache] Cleaned ${cleaned} expired entries`);
-    }
-  }, 5 * 60 * 1000);
+  setInterval(
+    () => {
+      const cleaned = searchCache.cleanup();
+      if (cleaned > 0) {
+        console.log(`[Cache] Cleaned ${cleaned} expired entries`);
+      }
+    },
+    5 * 60 * 1000
+  );
 }

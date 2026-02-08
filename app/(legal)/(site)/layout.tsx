@@ -25,7 +25,7 @@ async function LegalSidebarWrapper({
 
   return (
     <SidebarProvider defaultOpen={!isCollapsed}>
-      <LegalSidebar user={undefined} />
+      <LegalSidebar />
       <SidebarInset>{children}</SidebarInset>
     </SidebarProvider>
   );

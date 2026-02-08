@@ -1,13 +1,23 @@
-import { FileTextIcon, MicIcon, Music2Icon, FileIcon as LucideFileIcon } from "lucide-react";
+import {
+  FileTextIcon,
+  FileIcon as LucideFileIcon,
+  MicIcon,
+  Music2Icon,
+} from "lucide-react";
 import Image from "next/image";
-import type { Attachment } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Loader } from "./elements/loader";
 import { CrossSmallIcon } from "./icons";
 import { Button } from "./ui/button";
 
+export type PreviewAttachmentData = {
+  url: string;
+  name?: string;
+  contentType?: string;
+};
+
 interface PreviewAttachmentProps {
-  attachment: Attachment;
+  attachment: PreviewAttachmentData;
   isUploading?: boolean;
   isExtracting?: boolean;
   extractionError?: string;
@@ -31,7 +41,8 @@ function getFileIcon(contentType: string, name?: string) {
   // Word 文档
   if (
     contentType === "application/msword" ||
-    contentType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    contentType ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
   ) {
     return <FileTextIcon className="size-6 text-blue-500" />;
   }
@@ -55,7 +66,9 @@ function getFileIcon(contentType: string, name?: string) {
  * 格式化文件名显示
  */
 function formatFileName(name?: string): string {
-  if (!name) return "File";
+  if (!name) {
+    return "File";
+  }
   // 如果文件名太长，截断中间部分
   if (name.length > 15) {
     const ext = name.split(".").pop();
@@ -79,8 +92,12 @@ export const PreviewAttachment = ({
   // 判断是否是图片
   const isImage = contentType?.startsWith("image");
   // 判断是否是音频
-  const isAudio = contentType?.startsWith("audio/") ||
-    (name && ["mp3", "wav", "ogg", "m4a", "aac", "webm"].includes(name.split(".").pop()?.toLowerCase() || ""));
+  const isAudio =
+    contentType?.startsWith("audio/") ||
+    (name &&
+      ["mp3", "wav", "ogg", "m4a", "aac", "webm"].includes(
+        name.split(".").pop()?.toLowerCase() || ""
+      ));
 
   return (
     <div

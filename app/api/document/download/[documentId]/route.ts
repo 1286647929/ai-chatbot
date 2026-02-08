@@ -25,7 +25,9 @@ function buildProxyHeaders(upstream: Response): Headers {
   const headers = new Headers();
   const copy = (name: string) => {
     const v = upstream.headers.get(name);
-    if (v) headers.set(name, v);
+    if (v) {
+      headers.set(name, v);
+    }
   };
   copy("content-type");
   copy("content-disposition");
@@ -55,7 +57,8 @@ export async function GET(
     return new Response(text || "Download failed", {
       status: upstream.status,
       headers: {
-        "Content-Type": upstream.headers.get("content-type") || "text/plain; charset=utf-8",
+        "Content-Type":
+          upstream.headers.get("content-type") || "text/plain; charset=utf-8",
         "Cache-Control": "no-store",
       },
     });

@@ -23,7 +23,7 @@ export {
 } from "./redis";
 
 // 统一缓存接口
-import { generateCacheKey, searchCache } from "./memory";
+import { searchCache } from "./memory";
 import { type CacheType, getTTLForType, redisCache } from "./redis";
 
 /**
@@ -56,9 +56,14 @@ export class TieredCache {
   /**
    * 设置缓存（同时写入 L1 和 L2）
    */
+  // biome-ignore lint/suspicious/useAwait: async 用于保持 Promise<void> 返回类型一致性
   async set<T>(key: string, value: T, ttl?: number): Promise<void> {
     // L1: 内存缓存（使用更短的 TTL）
-    searchCache.set(key, value, ttl ? Math.min(ttl * 1000, 5 * 60 * 1000) : undefined);
+    searchCache.set(
+      key,
+      value,
+      ttl ? Math.min(ttl * 1000, 5 * 60 * 1000) : undefined
+    );
 
     // L2: Redis 缓存（异步）
     redisCache.set(key, value, ttl).catch((err) => {
@@ -117,6 +122,7 @@ export function withCache<TArgs extends unknown[], TResult>(
     ttl?: number;
   }
 ): (...args: TArgs) => Promise<TResult> {
+  // biome-ignore lint/suspicious/useAwait: async 用于保持 Promise 返回类型一致性
   return async (...args: TArgs): Promise<TResult> => {
     const key = options.keyGenerator(...args);
     const ttl = options.ttl ?? getTTLForType(options.type ?? "default");

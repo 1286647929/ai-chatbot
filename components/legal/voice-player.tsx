@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
 import { PauseIcon, PlayIcon } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
 
 interface VoicePlayerProps {
@@ -34,7 +33,9 @@ export function VoicePlayer({
 
   // 播放/暂停
   const togglePlay = useCallback(() => {
-    if (!audioRef.current) return;
+    if (!audioRef.current) {
+      return;
+    }
 
     if (isPlaying) {
       audioRef.current.pause();
@@ -114,6 +115,7 @@ export function VoicePlayer({
           <button
             className="text-muted-foreground text-xs hover:text-foreground"
             onClick={() => setShowText(!showText)}
+            type="button"
           >
             {showText ? "隐藏文字" : "显示文字"}
           </button>

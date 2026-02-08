@@ -68,6 +68,7 @@ export function useVoiceRecorder(options: UseVoiceRecorderOptions = {}) {
   }, []);
 
   // 开始录音
+  // biome-ignore lint/correctness/useExhaustiveDependencies: stopRecording 在后面声明，存在循环依赖
   const startRecording = useCallback(async () => {
     // 重置状态
     setState({

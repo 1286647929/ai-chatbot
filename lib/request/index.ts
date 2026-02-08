@@ -3,7 +3,6 @@ import { toast } from "sonner";
 import type {
   ApiResponse,
   ErrorInterceptor,
-  HttpMethod,
   Interceptors,
   RequestInterceptor,
   RequestOptions,
@@ -14,7 +13,7 @@ import { RequestError } from "./types";
 // ============================================================
 // 默认配置
 // ============================================================
-const DEFAULT_TIMEOUT = 30000;
+const DEFAULT_TIMEOUT = 30_000;
 const DEFAULT_RETRY_DELAY = 1000;
 
 // ============================================================
@@ -29,7 +28,9 @@ const interceptors: Interceptors = {
 /**
  * 添加请求拦截器
  */
-export function addRequestInterceptor(interceptor: RequestInterceptor): () => void {
+export function addRequestInterceptor(
+  interceptor: RequestInterceptor
+): () => void {
   interceptors.request.push(interceptor);
   return () => {
     const index = interceptors.request.indexOf(interceptor);
@@ -47,7 +48,9 @@ export function addResponseInterceptor<T = unknown>(
 ): () => void {
   interceptors.response.push(interceptor as ResponseInterceptor);
   return () => {
-    const index = interceptors.response.indexOf(interceptor as ResponseInterceptor);
+    const index = interceptors.response.indexOf(
+      interceptor as ResponseInterceptor
+    );
     if (index > -1) {
       interceptors.response.splice(index, 1);
     }
@@ -74,8 +77,13 @@ export function addErrorInterceptor(interceptor: ErrorInterceptor): () => void {
 /**
  * 构建带查询参数的 URL
  */
-function buildUrl(url: string, params?: Record<string, string | number | boolean | undefined>): string {
-  if (!params) return url;
+function buildUrl(
+  url: string,
+  params?: Record<string, string | number | boolean | undefined>
+): string {
+  if (!params) {
+    return url;
+  }
 
   const searchParams = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -85,7 +93,9 @@ function buildUrl(url: string, params?: Record<string, string | number | boolean
   }
 
   const queryString = searchParams.toString();
-  if (!queryString) return url;
+  if (!queryString) {
+    return url;
+  }
 
   return url.includes("?") ? `${url}&${queryString}` : `${url}?${queryString}`;
 }
@@ -93,7 +103,10 @@ function buildUrl(url: string, params?: Record<string, string | number | boolean
 /**
  * 创建超时 Promise
  */
-function createTimeoutPromise(timeout: number, controller: AbortController): Promise<never> {
+function createTimeoutPromise(
+  timeout: number,
+  controller: AbortController
+): Promise<never> {
   return new Promise((_, reject) => {
     setTimeout(() => {
       controller.abort();
@@ -116,9 +129,15 @@ function getErrorMessage(status: number, data: unknown): string {
   // 优先使用响应中的错误消息
   if (data && typeof data === "object") {
     const obj = data as Record<string, unknown>;
-    if (typeof obj.message === "string") return obj.message;
-    if (typeof obj.error === "string") return obj.error;
-    if (typeof obj.msg === "string") return obj.msg;
+    if (typeof obj.message === "string") {
+      return obj.message;
+    }
+    if (typeof obj.error === "string") {
+      return obj.error;
+    }
+    if (typeof obj.msg === "string") {
+      return obj.msg;
+    }
   }
 
   // 根据状态码返回默认消息
@@ -185,7 +204,8 @@ async function executeRequest<TResponse, TBody = unknown>(
       // FormData 不需要设置 Content-Type，浏览器会自动处理
       fetchOptions.body = data;
     } else {
-      (fetchOptions.headers as Record<string, string>)["Content-Type"] = "application/json";
+      (fetchOptions.headers as Record<string, string>)["Content-Type"] =
+        "application/json";
       fetchOptions.body = JSON.stringify(data);
     }
   }
@@ -392,10 +412,6 @@ export function upload<TResponse = unknown>(
   });
 }
 
-// ============================================================
-// 导出类型
-// ============================================================
-export { RequestError } from "./types";
 export type {
   ApiResponse,
   ErrorInterceptor,
@@ -404,3 +420,7 @@ export type {
   RequestOptions,
   ResponseInterceptor,
 } from "./types";
+// ============================================================
+// 导出类型
+// ============================================================
+export { RequestError } from "./types";

@@ -1,19 +1,31 @@
 "use client";
 
-import { type ChangeEvent, useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { MicIcon, PaperclipIcon } from "lucide-react";
+import {
+  type ChangeEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 
 import { useLegalChat } from "@/hooks/use-legal-chat";
 import { recognizeVoice } from "@/lib/api";
-import type { LegalAttachment, LegalMessage, LegalStep } from "@/lib/legal/types";
+import type {
+  LegalAttachment,
+  LegalMessage,
+  LegalStep,
+} from "@/lib/legal/types";
 import { cn } from "@/lib/utils";
-import { AttachmentAnalysisCard } from "./attachment-analysis";
-import { InlineVoiceRecorder, useVoiceInput } from "./voice-input";
 import { Response } from "../elements/response";
 import { SparklesIcon, StopIcon } from "../icons";
 import { PreviewAttachment } from "../preview-attachment";
+import { Button } from "../ui/button";
+import { ImagePreview } from "../ui/image-preview";
+import { Textarea } from "../ui/textarea";
+import { AttachmentAnalysisCard } from "./attachment-analysis";
 import {
   CaseInfoCard,
   CompletedDocument,
@@ -24,9 +36,7 @@ import {
   QuestionCard,
   SupplementForm,
 } from "./step-renderers";
-import { Button } from "../ui/button";
-import { ImagePreview } from "../ui/image-preview";
-import { Textarea } from "../ui/textarea";
+import { InlineVoiceRecorder, useVoiceInput } from "./voice-input";
 
 const LEGAL_UPLOAD_ALLOWED_EXTENSIONS = new Set([
   "bmp",
@@ -438,7 +448,9 @@ export function LegalChat() {
 
   // 初始化会话（使用 ref 防止 React Strict Mode 下重复调用）
   useEffect(() => {
-    if (hasInitializedRef.current) return;
+    if (hasInitializedRef.current) {
+      return;
+    }
     hasInitializedRef.current = true;
     initSession();
   }, [initSession]);
@@ -463,6 +475,7 @@ export function LegalChat() {
   }, [reset, initSession]);
 
   // 滚动到底部
+  // biome-ignore lint/correctness/useExhaustiveDependencies: 依赖 messages 和 currentStep 作为触发条件
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, currentStep]);
@@ -486,7 +499,11 @@ export function LegalChat() {
   // 发送消息
   const handleSend = async () => {
     const trimmedValue = inputValue.trim();
-    if ((!trimmedValue && attachments.length === 0) || isLoading || isStreaming) {
+    if (
+      (!trimmedValue && attachments.length === 0) ||
+      isLoading ||
+      isStreaming
+    ) {
       return;
     }
 
@@ -504,42 +521,46 @@ export function LegalChat() {
   };
 
   // 上传文件到 Legal Upload（写入 OSS，返回 ossId/url）
-  const uploadFilesToLegalUpload = useCallback(async (files: File[]): Promise<LegalAttachment[]> => {
-    const formData = new FormData();
-    for (const file of files) {
-      formData.append("files", file, file.name);
-    }
-
-    const response = await fetch("/api/legal/upload", {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error((errorData as any).error || "上传失败");
-    }
-
-    const uploaded: UploadCredentialVo[] = await response.json();
-    const byName = new Map(uploaded.map((u) => [u.fileName, u]));
-
-    const list: LegalAttachment[] = [];
-    for (const file of files) {
-      const u = byName.get(file.name);
-      if (!u?.ossId) {
-        continue;
+  const uploadFilesToLegalUpload = useCallback(
+    async (files: File[]): Promise<LegalAttachment[]> => {
+      const formData = new FormData();
+      for (const file of files) {
+        formData.append("files", file, file.name);
       }
-      list.push({
-        oss_id: u.ossId,
-        file_name: u.fileName || file.name,
-        content_type: u.contentType || file.type || "application/octet-stream",
-        file_size: u.fileSize ?? file.size,
-        local_url: URL.createObjectURL(file),
-        file_url: u.url,
+
+      const response = await fetch("/api/legal/upload", {
+        method: "POST",
+        body: formData,
       });
-    }
-    return list;
-  }, []);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error((errorData as any).error || "上传失败");
+      }
+
+      const uploaded: UploadCredentialVo[] = await response.json();
+      const byName = new Map(uploaded.map((u) => [u.fileName, u]));
+
+      const list: LegalAttachment[] = [];
+      for (const file of files) {
+        const u = byName.get(file.name);
+        if (!u?.ossId) {
+          continue;
+        }
+        list.push({
+          oss_id: u.ossId,
+          file_name: u.fileName || file.name,
+          content_type:
+            u.contentType || file.type || "application/octet-stream",
+          file_size: u.fileSize ?? file.size,
+          local_url: URL.createObjectURL(file),
+          file_url: u.url,
+        });
+      }
+      return list;
+    },
+    []
+  );
 
   // 处理文件选择
   const handleFileChange = useCallback(
@@ -629,7 +650,6 @@ export function LegalChat() {
     confirmRecording: confirmVoiceRecording,
     hasPermission: voicePermission,
   } = useVoiceInput(handleVoiceRecordingComplete);
-
 
   // 处理键盘事件
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -798,13 +818,24 @@ export function LegalChat() {
                   {/* 语音输入按钮 */}
                   <Button
                     className="size-8"
-                    disabled={isLoading || isStreaming || voicePermission === false}
+                    disabled={
+                      isLoading || isStreaming || voicePermission === false
+                    }
                     onClick={startVoiceRecording}
                     size="icon"
-                    title={voicePermission === false ? "麦克风权限被拒绝" : "语音输入"}
+                    title={
+                      voicePermission === false
+                        ? "麦克风权限被拒绝"
+                        : "语音输入"
+                    }
                     variant="ghost"
                   >
-                    <MicIcon className={cn("size-4", voicePermission === false && "opacity-50")} />
+                    <MicIcon
+                      className={cn(
+                        "size-4",
+                        voicePermission === false && "opacity-50"
+                      )}
+                    />
                   </Button>
 
                   {isStreaming ? (
@@ -819,7 +850,10 @@ export function LegalChat() {
                   ) : (
                     <Button
                       className="size-8"
-                      disabled={(!inputValue.trim() && attachments.length === 0) || isLoading}
+                      disabled={
+                        (!inputValue.trim() && attachments.length === 0) ||
+                        isLoading
+                      }
                       onClick={handleSend}
                       size="icon"
                     >

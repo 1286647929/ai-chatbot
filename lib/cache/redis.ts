@@ -47,7 +47,7 @@ const DEFAULT_CONFIG: RedisCacheConfig = {
  */
 export class RedisCache {
   private client: RedisClientType | null = null;
-  private config: RedisCacheConfig;
+  private readonly config: RedisCacheConfig;
   private connectionPromise: Promise<RedisClientType | null> | null = null;
   private hits = 0;
   private misses = 0;
@@ -59,9 +59,14 @@ export class RedisCache {
   /**
    * 初始化 Redis 连接
    */
+  // biome-ignore lint/suspicious/useAwait: async 用于保持 Promise 返回类型一致性
   private async getClient(): Promise<RedisClientType | null> {
-    if (this.client) return this.client;
-    if (this.connectionPromise) return this.connectionPromise;
+    if (this.client) {
+      return this.client;
+    }
+    if (this.connectionPromise) {
+      return this.connectionPromise;
+    }
 
     this.connectionPromise = this.connect();
     return this.connectionPromise;
@@ -105,11 +110,15 @@ export class RedisCache {
    * 获取缓存值
    */
   async get<T>(key: string): Promise<T | null> {
-    if (!this.config.enabled) return null;
+    if (!this.config.enabled) {
+      return null;
+    }
 
     try {
       const client = await this.getClient();
-      if (!client) return null;
+      if (!client) {
+        return null;
+      }
 
       const fullKey = this.buildKey(key);
       const data = await client.get(fullKey);
@@ -132,11 +141,15 @@ export class RedisCache {
    * 设置缓存值
    */
   async set<T>(key: string, value: T, ttl?: number): Promise<boolean> {
-    if (!this.config.enabled) return false;
+    if (!this.config.enabled) {
+      return false;
+    }
 
     try {
       const client = await this.getClient();
-      if (!client) return false;
+      if (!client) {
+        return false;
+      }
 
       const fullKey = this.buildKey(key);
       const data = JSON.stringify(value);
@@ -154,11 +167,15 @@ export class RedisCache {
    * 删除缓存值
    */
   async delete(key: string): Promise<boolean> {
-    if (!this.config.enabled) return false;
+    if (!this.config.enabled) {
+      return false;
+    }
 
     try {
       const client = await this.getClient();
-      if (!client) return false;
+      if (!client) {
+        return false;
+      }
 
       const fullKey = this.buildKey(key);
       await client.del(fullKey);
@@ -218,7 +235,9 @@ export class RedisCache {
    * 检查是否可用
    */
   async isAvailable(): Promise<boolean> {
-    if (!this.config.enabled) return false;
+    if (!this.config.enabled) {
+      return false;
+    }
     const client = await this.getClient();
     return client !== null;
   }

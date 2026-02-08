@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { CheckIcon, MicIcon, PlusIcon, XIcon } from "lucide-react";
-
-import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
+import { useCallback, useRef, useState } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { cn } from "@/lib/utils";
 import { Button } from "../ui/button";
 import { VoiceWaveform } from "./voice-waveform";
@@ -121,7 +120,9 @@ export function useVoiceInput(
   const handleStartRecording = useCallback(async () => {
     if (hasPermission === null) {
       const granted = await requestPermission();
-      if (!granted) return;
+      if (!granted) {
+        return;
+      }
     }
 
     recordingRef.current = { blob: null, duration: 0 };
@@ -203,11 +204,15 @@ export function VoiceInput({ onRecordingComplete, disabled }: VoiceInputProps) {
 
   // 桌面端点击处理
   const handleClick = useCallback(async () => {
-    if (isMobile) return;
+    if (isMobile) {
+      return;
+    }
 
     if (hasPermission === null) {
       const granted = await requestPermission();
-      if (!granted) return;
+      if (!granted) {
+        return;
+      }
     }
 
     if (isRecording) {
@@ -227,7 +232,9 @@ export function VoiceInput({ onRecordingComplete, disabled }: VoiceInputProps) {
   // 移动端触摸开始
   const handleTouchStart = useCallback(
     async (e: React.TouchEvent) => {
-      if (!isMobile) return;
+      if (!isMobile) {
+        return;
+      }
 
       e.preventDefault();
       startYRef.current = e.touches[0].clientY;
@@ -250,7 +257,9 @@ export function VoiceInput({ onRecordingComplete, disabled }: VoiceInputProps) {
   // 移动端触摸移动
   const handleTouchMove = useCallback(
     (e: React.TouchEvent) => {
-      if (!isMobile || !isRecording) return;
+      if (!isMobile || !isRecording) {
+        return;
+      }
 
       const currentY = e.touches[0].clientY;
       const deltaY = startYRef.current - currentY;
@@ -267,7 +276,9 @@ export function VoiceInput({ onRecordingComplete, disabled }: VoiceInputProps) {
 
   // 移动端触摸结束
   const handleTouchEnd = useCallback(() => {
-    if (!isMobile) return;
+    if (!isMobile) {
+      return;
+    }
 
     setIsHolding(false);
 

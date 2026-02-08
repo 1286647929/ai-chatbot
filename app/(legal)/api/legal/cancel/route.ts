@@ -35,7 +35,10 @@ export async function POST(request: Request) {
   try {
     body = requestSchema.parse(await request.json());
   } catch {
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid request body" },
+      { status: 400 }
+    );
   }
 
   try {
@@ -69,7 +72,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    return NextResponse.json({ error: result?.msg || "Cancel failed" }, { status: 400 });
+    return NextResponse.json(
+      { error: result?.msg || "Cancel failed" },
+      { status: 400 }
+    );
   } catch (error) {
     console.error("Legal cancel API error:", error);
     return NextResponse.json({ error: "Cancel failed" }, { status: 500 });

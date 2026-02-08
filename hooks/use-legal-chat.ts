@@ -73,7 +73,10 @@ const initialState: LegalChatState = {
  * 根据 next_step 提取消息内容
  * 不同阶段的主要内容字段不同
  */
-function extractMessageContent(step: LegalStep, data: LegalResponseData): string {
+function extractMessageContent(
+  step: LegalStep,
+  data: LegalResponseData
+): string {
   switch (step) {
     case "greeting":
       return data.message || "欢迎使用法律文书助手";
@@ -157,7 +160,9 @@ function processStepData(
               }
             : prevState.caseInfo,
         documentPaths: data.document_paths || prevState.documentPaths,
-        recommendedPath: (data.recommended_path as RecommendedPath) || prevState.recommendedPath,
+        recommendedPath:
+          (data.recommended_path as RecommendedPath) ||
+          prevState.recommendedPath,
       };
 
     case "path_selected":
@@ -230,7 +235,7 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const postInteract = useCallback(
-    async (body: LegalInteractRequest, signal: AbortSignal) => {
+    (body: LegalInteractRequest, signal: AbortSignal) => {
       return fetch("/api/legal/interact", {
         method: "POST",
         headers: {
@@ -465,7 +470,10 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
                   updateLastAssistantMessage({
                     content:
                       streamingContent ||
-                      extractMessageContent(event.next_step || "greeting", event.data || {}),
+                      extractMessageContent(
+                        event.next_step || "greeting",
+                        event.data || {}
+                      ),
                     step: event.next_step,
                     data: event.data,
                     is_streaming: false,
@@ -495,6 +503,8 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
                   });
                   controller.abort();
                   break;
+                default:
+                  break;
               }
             },
             signal
@@ -514,7 +524,10 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
               stream: false,
             };
 
-            const retryResponse = await postInteract(retryBody, retryController.signal);
+            const retryResponse = await postInteract(
+              retryBody,
+              retryController.signal
+            );
             if (!retryResponse.ok) {
               const errorData = await retryResponse.json().catch(() => ({}));
               throw new Error((errorData as any).error || "Request failed");
@@ -791,7 +804,9 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
       const response = await postInteract({ stream: false }, controller.signal);
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error((errorData as any).error || "Failed to initialize session");
+        throw new Error(
+          (errorData as any).error || "Failed to initialize session"
+        );
       }
       const data: LegalApiResponse = await response.json();
       handleResponse(data);
@@ -799,7 +814,10 @@ export function useLegalChat(options: UseLegalChatOptions = {}) {
       setState((prev) => ({
         ...prev,
         isLoading: false,
-        error: error instanceof Error ? error.message : "Failed to initialize session",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to initialize session",
       }));
     }
   }, [handleResponse, postInteract]);

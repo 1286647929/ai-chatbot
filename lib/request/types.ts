@@ -56,7 +56,12 @@ export class RequestError extends Error {
   /** 响应数据 */
   data?: unknown;
 
-  constructor(message: string, status: number, response?: Response, data?: unknown) {
+  constructor(
+    message: string,
+    status: number,
+    response?: Response,
+    data?: unknown
+  ) {
     super(message);
     this.name = "RequestError";
     this.status = status;
@@ -71,7 +76,9 @@ export class RequestError extends Error {
 export type RequestInterceptor = (
   url: string,
   options: RequestInit
-) => Promise<{ url: string; options: RequestInit }> | { url: string; options: RequestInit };
+) =>
+  | Promise<{ url: string; options: RequestInit }>
+  | { url: string; options: RequestInit };
 
 /**
  * 响应拦截器
@@ -84,9 +91,7 @@ export type ResponseInterceptor<T = unknown> = (
 /**
  * 错误拦截器
  */
-export type ErrorInterceptor = (
-  error: RequestError
-) => Promise<void> | void;
+export type ErrorInterceptor = (error: RequestError) => Promise<void> | void;
 
 /**
  * 拦截器配置

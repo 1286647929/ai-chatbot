@@ -90,7 +90,10 @@ export async function POST(request: Request) {
       const payload = raw as { code?: number; msg?: string; data?: any } | null;
       if (!response.ok || !payload || payload.code !== 200 || !payload.data) {
         const msg = payload?.msg || "Failed to create session";
-        return NextResponse.json({ error: msg }, { status: response.status || 500 });
+        return NextResponse.json(
+          { error: msg },
+          { status: response.status || 500 }
+        );
       }
 
       const session = payload.data as {
@@ -101,7 +104,8 @@ export async function POST(request: Request) {
 
       const data: LegalApiResponse = {
         session_id: session.sessionUuid || "",
-        next_step: (session.currentStep as LegalApiResponse["next_step"]) || "greeting",
+        next_step:
+          (session.currentStep as LegalApiResponse["next_step"]) || "greeting",
         data: {
           message: session.lastMessageText || "",
         },
@@ -153,7 +157,8 @@ export async function POST(request: Request) {
       };
 
       const responseData: Record<string, unknown> =
-        (result.data && typeof result.data === "object" ? result.data : {}) ?? {};
+        (result.data && typeof result.data === "object" ? result.data : {}) ??
+        {};
       if (!("message" in responseData) && result.message) {
         responseData.message = result.message;
       }
@@ -168,12 +173,15 @@ export async function POST(request: Request) {
     }
 
     // 流式请求 - 代理 SSE
-    const response = await fetch(`${baseUrl}/app/legal/ai/message/send_stream`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(upstreamBody),
-      signal: request.signal,
-    });
+    const response = await fetch(
+      `${baseUrl}/app/legal/ai/message/send_stream`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify(upstreamBody),
+        signal: request.signal,
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
